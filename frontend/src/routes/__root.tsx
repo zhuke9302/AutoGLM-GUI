@@ -14,7 +14,7 @@ export const Route = createRootRoute({
   component: RootComponent,
 });
 
-function Footer() {
+export function Footer() {
   const buildBackendVersion = __BACKEND_VERSION__ || 'unknown';
   const { locale, setLocale, localeName } = useLocale();
   const t = useTranslation();
@@ -118,7 +118,7 @@ function Footer() {
   );
 }
 
-function RootComponent() {
+export function RootComponent() {
   return (
     <DeviceProvider>
       <div className="h-screen flex flex-col overflow-hidden">

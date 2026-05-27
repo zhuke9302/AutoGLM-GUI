@@ -516,10 +516,12 @@ export function DeviceSidebar({
   // Cleanup QR session when dialog closes or tab changes
   useEffect(() => {
     if (!showManualConnect || activeTab !== 'pair') {
-      if (qrSession && qrSession.status === 'listening') {
-        handleCancelQRPairing();
-      }
-      stopQRStatusPolling();
+      queueMicrotask(() => {
+        if (qrSession && qrSession.status === 'listening') {
+          handleCancelQRPairing();
+        }
+        stopQRStatusPolling();
+      });
     }
   }, [
     showManualConnect,
@@ -544,7 +546,9 @@ export function DeviceSidebar({
       !qrSession &&
       !isGeneratingQR
     ) {
-      handleGenerateQRCode();
+      queueMicrotask(() => {
+        handleGenerateQRCode();
+      });
     }
   }, [
     showManualConnect,
@@ -623,7 +627,9 @@ export function DeviceSidebar({
   useEffect(() => {
     if (showManualConnect) {
       // Initial scan
-      handleDiscover();
+      queueMicrotask(() => {
+        handleDiscover();
+      });
 
       // Poll every 5 seconds for device updates
       const pollInterval = setInterval(() => {
