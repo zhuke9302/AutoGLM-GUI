@@ -86,29 +86,32 @@ const AGENT_PRESETS = [
     icon: Cpu,
     defaultConfig: {},
   },
-  {
-    name: 'mai',
-    displayName: 'MAI Agent',
-    descriptionKey: 'agentMaiDesc',
-    icon: Brain,
-    defaultConfig: {
-      history_n: 3,
-    },
-  },
-  {
-    name: 'gemini',
-    displayName: 'General Vision Agent',
-    descriptionKey: 'agentGeminiDesc',
-    icon: Sparkles,
-    defaultConfig: {},
-  },
-  {
-    name: 'droidrun',
-    displayName: 'DroidRun Agent',
-    descriptionKey: 'agentDroidrunDesc',
-    icon: Smartphone,
-    defaultConfig: {},
-  },
+  // MAI Agent 已禁用
+  // {
+  //   name: 'mai',
+  //   displayName: 'MAI Agent',
+  //   descriptionKey: 'agentMaiDesc',
+  //   icon: Brain,
+  //   defaultConfig: {
+  //     history_n: 3,
+  //   },
+  // },
+  // General Vision Agent 已禁用
+  // {
+  //   name: 'gemini',
+  //   displayName: 'General Vision Agent',
+  //   descriptionKey: 'agentGeminiDesc',
+  //   icon: Sparkles,
+  //   defaultConfig: {},
+  // },
+  // DroidRun Agent 已禁用
+  // {
+  //   name: 'droidrun',
+  //   displayName: 'DroidRun Agent',
+  //   descriptionKey: 'agentDroidrunDesc',
+  //   icon: Smartphone,
+  //   defaultConfig: {},
+  // },
   {
     name: 'midscene',
     displayName: 'Midscene Agent',
@@ -118,13 +121,14 @@ const AGENT_PRESETS = [
       model_family: 'doubao-vision',
     },
   },
-  {
-    name: 'qwen',
-    displayName: 'Qwen Agent',
-    descriptionKey: 'agentQwenDesc',
-    icon: Layers,
-    defaultConfig: {},
-  },
+  // Qwen Agent 已禁用
+  // {
+  //   name: 'qwen',
+  //   displayName: 'Qwen Agent',
+  //   descriptionKey: 'agentQwenDesc',
+  //   icon: Layers,
+  //   defaultConfig: {},
+  // },
 ] as const;
 
 // 决策模型预设配置（与视觉模型保持一致）
@@ -501,15 +505,17 @@ export function ChatComponent() {
           </DialogHeader>
 
           <Tabs defaultValue="vision" className="flex-1 flex flex-col min-h-0">
-            <TabsList className="grid w-full grid-cols-2 flex-shrink-0">
+            <TabsList className="grid w-full grid-cols-1 flex-shrink-0">
               <TabsTrigger value="vision">
                 <Eye className="w-4 h-4 mr-2" />
                 {t.chat.visionModelTab}
               </TabsTrigger>
+              {/* 决策模型 Tab 已禁用
               <TabsTrigger value="decision">
                 <Brain className="w-4 h-4 mr-2" />
                 {t.chat.decisionModelTab}
               </TabsTrigger>
+              */}
             </TabsList>
 
             {/* 视觉模型 Tab */}
@@ -861,7 +867,7 @@ export function ChatComponent() {
                 </div>
               </div>
 
-              {/* 分层代理最大轮次配置 */}
+              {/* 分层代理最大轮次配置（已禁用，分层代理模式已关闭）
               <div className="space-y-2">
                 <Label htmlFor="layered_max_turns">
                   {t.chat?.layeredMaxTurns || 'Layered Agent Max Turns'}
@@ -885,9 +891,11 @@ export function ChatComponent() {
                     'Maximum turns for layered agent mode (minimum 1)'}
                 </p>
               </div>
+              */}
             </TabsContent>
 
-            {/* 决策模型 Tab */}
+            {/* 决策模型 Tab 已禁用，仅保留视觉模型配置 */}
+            {false && (
             <TabsContent
               value="decision"
               className="space-y-4 mt-4 overflow-y-auto flex-1 min-h-0"
@@ -1098,6 +1106,7 @@ export function ChatComponent() {
                 )}
               </div>
             </TabsContent>
+            )}
           </Tabs>
 
           <DialogFooter className="sm:justify-between gap-2 flex-shrink-0">
@@ -1149,7 +1158,7 @@ export function ChatComponent() {
 
       {/* Main content */}
       <div className="flex-1 flex flex-col min-h-0 relative">
-        {/* Mode Toggle - Floating Capsule */}
+        {/* Mode Toggle - Floating Capsule (隐藏，默认经典模式)
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20">
           <div className="flex items-center gap-0.5 bg-white/95 dark:bg-slate-800/95 backdrop-blur-sm rounded-full p-1 shadow-lg border border-slate-200 dark:border-slate-700">
             <Tooltip>
@@ -1207,9 +1216,10 @@ export function ChatComponent() {
             </Tooltip>
           </div>
         </div>
+        */}
 
         {/* Content area */}
-        <div className="flex-1 flex items-stretch justify-center min-h-0 px-4 py-4 pt-16">
+        <div className="flex-1 flex items-stretch justify-center min-h-0 px-4 py-4">
           {!currentDevice ? (
             <div className="flex-1 flex items-center justify-center bg-slate-50 dark:bg-slate-950">
               <div className="text-center">

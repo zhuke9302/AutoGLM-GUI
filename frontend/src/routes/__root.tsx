@@ -3,7 +3,7 @@ import { Outlet, createRootRoute } from '@tanstack/react-router';
 import { TanStackRouterDevtools } from '@tanstack/react-router-devtools';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
-import { Github, Globe } from 'lucide-react';
+import { Globe } from 'lucide-react';
 import { useLocale, useTranslation } from '../lib/i18n-context';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { NavigationSidebar } from '../components/NavigationSidebar';
@@ -85,33 +85,6 @@ export function Footer() {
             className="h-4 bg-slate-200 dark:bg-slate-700"
           />
           <ThemeToggle />
-          <Separator
-            orientation="vertical"
-            className="h-4 bg-slate-200 dark:bg-slate-700"
-          />
-          <a
-            href="https://github.com/suyiiyii/AutoGLM-GUI"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="hover:text-[#1d9bf0] transition-colors flex items-center gap-1"
-          >
-            <Github className="w-4 h-4" />
-            GitHub
-          </a>
-        </div>
-        <div className="text-center">
-          <a
-            href="https://github.com/suyiiyii/AutoGLM-GUI"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-slate-500 dark:text-slate-400 hover:text-[#1d9bf0] transition-colors"
-          >
-            Star{' '}
-            <span className="font-semibold" role="img" aria-label="star">
-              ⭐
-            </span>{' '}
-            on GitHub
-          </a>
         </div>
       </div>
     </footer>
