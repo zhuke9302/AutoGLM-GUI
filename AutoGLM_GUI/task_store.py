@@ -838,6 +838,27 @@ class TaskStore:
                 )
             )
 
+    def list_recent_terminal_tasks(self, limit: int = 10) -> list[TaskRecord]:
+        """Return the most recently finished task runs in terminal states."""
+        self._ensure_ready()
+        with self._lock:
+            rows = self._fetchall(
+                """
+                SELECT * FROM task_runs
+                WHERE status IN (?, ?, ?, ?)
+                ORDER BY finished_at DESC, created_at DESC
+                LIMIT ?
+                """,
+                (
+                    TaskStatus.SUCCEEDED.value,
+                    TaskStatus.FAILED.value,
+                    TaskStatus.CANCELLED.value,
+                    TaskStatus.INTERRUPTED.value,
+                    limit,
+                ),
+            )
+            return [dict(row) for row in rows]
+
     def delete_task(self, task_id: str) -> bool:
         self._ensure_ready()
         with self._lock:

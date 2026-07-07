@@ -1,0 +1,31 @@
+# Checklist
+
+- [x] 服务端接口规范文档完整，覆盖所有 8 组接口（注册心跳、设备上报、定时任务同步、工作流同步、配置同步、日志上报、SSE推送通道、任务控制）
+- [x] 服务端表结构建议完整，覆盖 8 张表（clients, client_devices, scheduled_tasks, workflows, task_runs, task_events, uploaded_files, model_configs）
+- [x] Pydantic schemas 定义完整，与接口规范一一对应
+- [x] HTTP 客户端实现认证（JWT）、重试、超时、gzip 压缩
+- [x] 客户端注册逻辑正确，启动时注册并获取 client_id 和令牌
+- [x] 心跳定时任务运行正常，间隔可配置
+- [x] SSE 推送通道建立成功，能接收服务端变更通知
+- [x] SSE 事件正确分发：scheduled_task.changed / workflow.changed / config.changed / task.cancel / task.dispatch
+- [x] SSE 断线自动重连，指数退避（1s→2s→4s→...→30s）
+- [x] SSE 重连后触发全量同步
+- [x] 设备状态变更时即时上报，非轮询
+- [x] 定时任务增量同步正确（since 参数 + 合并 + 删除处理）
+- [x] 工作流增量同步正确
+- [x] 模型配置同步正确，优先级插入到 CLI/ENV 之后
+- [x] SSE 推送触发增量同步延迟 < 1s
+- [x] 服务端手动触发巡检（task.dispatch）能立即执行
+- [x] 任务完成时自动上报运行结果
+- [x] 任务事件批量上报正确，支持分批
+- [x] 截图上传后事件中引用 URL 而非 base64
+- [x] 离线时上报数据写入本地队列，恢复连接后补报
+- [x] 离线队列有容量上限和过期清理
+- [x] 未配置服务端地址时保持纯单机模式，无副作用
+- [x] 同步模块在 lifespan 中正确启动/停止
+- [x] 前端展示服务端连接状态
+- [x] 单元测试覆盖核心模块（含 push_channel）
+- [x] 性能：SSE 推送实现 < 1s 实时性
+- [x] 性能：增量同步避免全量拉取
+- [x] 性能：截图通过 URL 引用避免大文件传输
+- [x] 性能：事件批量上报减少 HTTP 请求

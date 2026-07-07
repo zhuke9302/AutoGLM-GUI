@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link, useMatchRoute } from '@tanstack/react-router';
 import {
   MessageSquare,
@@ -15,6 +15,7 @@ import {
   TooltipContent,
 } from '@/components/ui/tooltip';
 import { useTranslation } from '../lib/i18n-context';
+import { getSyncStatus, type SyncStatus } from '../api';
 import logoImage from '@/assets/logo.png';
 
 interface NavigationItem {
@@ -31,6 +32,39 @@ interface NavigationSidebarProps {
 export function NavigationSidebar({ className }: NavigationSidebarProps) {
   const t = useTranslation();
   const matchRoute = useMatchRoute();
+  const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    let timeoutId: number | null = null;
+
+    const poll = async () => {
+      try {
+        const status = await getSyncStatus();
+        if (mountedRef.current) {
+          setSyncStatus(status);
+        }
+      } catch {
+        // Endpoint may not exist in standalone mode; silently ignore
+        if (mountedRef.current) {
+          setSyncStatus(null);
+        }
+      }
+      if (mountedRef.current) {
+        timeoutId = window.setTimeout(poll, 30_000);
+      }
+    };
+
+    void poll();
+
+    return () => {
+      mountedRef.current = false;
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+      }
+    };
+  }, []);
 
   const navigationItems: NavigationItem[] = [
     {
@@ -70,6 +104,20 @@ export function NavigationSidebar({ className }: NavigationSidebarProps) {
       path: '/terminal',
     },
   ];
+
+  // Determine sync indicator state
+  const syncLabel =
+    syncStatus?.active && syncStatus.connected
+      ? (t.syncStatus?.connected ?? '已连接')
+      : syncStatus?.active && !syncStatus.connected
+        ? (t.syncStatus?.offline ?? '离线')
+        : null;
+  const syncDotColor =
+    syncStatus?.active && syncStatus.connected
+      ? 'bg-green-500'
+      : syncStatus?.active && !syncStatus.connected
+        ? 'bg-yellow-500'
+        : null;
 
   return (
     <nav
@@ -120,6 +168,27 @@ export function NavigationSidebar({ className }: NavigationSidebarProps) {
           );
         })}
       </div>
+
+      {/* Sync status indicator at bottom */}
+      {syncLabel && syncDotColor && (
+        <div className="mt-auto pb-3 flex flex-col items-center gap-1">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="flex flex-col items-center gap-1 cursor-default">
+                <span
+                  className={`inline-block w-2 h-2 rounded-full ${syncDotColor}`}
+                />
+                <span className="text-[10px] leading-none text-slate-500 dark:text-slate-400">
+                  {syncLabel}
+                </span>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="right" sideOffset={8}>
+              {syncStatus?.server_url ?? ''}
+            </TooltipContent>
+          </Tooltip>
+        </div>
+      )}
     </nav>
   );
 }

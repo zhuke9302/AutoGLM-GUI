@@ -1386,3 +1386,18 @@ export async function assignDeviceToGroup(
   );
   return res.data;
 }
+
+// ==================== Sync Status API ====================
+
+export interface SyncStatus {
+  active: boolean;
+  connected: boolean;
+  server_url: string | null;
+  client_id: string | null;
+  offline_queue_size: number;
+}
+
+export async function getSyncStatus(): Promise<SyncStatus> {
+  const res = await axios.get<SyncStatus>('/api/sync/status');
+  return res.data;
+}

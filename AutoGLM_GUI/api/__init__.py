@@ -34,6 +34,7 @@ from . import (
     media,
     metrics,
     scheduled_tasks,
+    sync_status,
     terminal,
     tasks,
     version,
@@ -172,11 +173,29 @@ def create_app() -> FastAPI:
         # Start scheduled task scheduler
         await scheduler_manager.start()
 
+        # Start sync subsystem (no-op if AUTOGLM_SERVER_URL is not set)
+        from AutoGLM_GUI.sync.manager import sync_manager
+        from AutoGLM_GUI.sync.schemas import SyncConfig
+        from AutoGLM_GUI.workflow_manager import workflow_manager
+        from AutoGLM_GUI.config_manager import config_manager
+
+        server_url = os.environ.get("AUTOGLM_SERVER_URL")
+        if server_url:
+            sync_manager._config = SyncConfig(server_url=server_url)
+        await sync_manager.start(
+            device_manager=device_manager,
+            task_manager=task_manager,
+            scheduler_manager=scheduler_manager,
+            workflow_manager=workflow_manager,
+            config_manager=config_manager,
+        )
+
         # Run MCP lifespan
         async with mcp_app.lifespan(app):
             yield
 
         # App shutdown
+        await sync_manager.stop()
         await scheduler_manager.shutdown()
         await task_manager.shutdown()
 
@@ -202,6 +221,7 @@ def create_app() -> FastAPI:
     app.include_router(media.router)
     app.include_router(metrics.router)
     app.include_router(scheduled_tasks.router)
+    app.include_router(sync_status.router)
     app.include_router(terminal.router)
     app.include_router(tasks.router)
     app.include_router(version.router)

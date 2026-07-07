@@ -8,7 +8,7 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import TypeAlias
+from typing import Callable, TypeAlias
 
 from typing_extensions import TypedDict
 
@@ -292,6 +292,9 @@ class DeviceManager:
         self._remote_devices: dict[str, DeviceProtocol] = {}
         self._remote_device_configs: dict[str, RemoteDeviceConfig] = {}
 
+        # Device change callbacks (called when device set changes after poll)
+        self._device_change_callbacks: list[Callable[[], None]] = []
+
         # ADB Keyboard setup state (process-local, best-effort)
         self._adb_keyboard_attempted_serials: set[DeviceSerial] = set()
         self._adb_keyboard_ready_serials: set[DeviceSerial] = set()
@@ -341,6 +344,13 @@ class DeviceManager:
                 logger.warning("Polling thread did not stop gracefully")
             else:
                 logger.info("DeviceManager polling stopped")
+
+    def register_device_change_callback(self, callback: Callable[[], None]) -> None:
+        """Register a callback to be invoked when the device set changes.
+
+        Callbacks are called from the polling thread (synchronous, non-blocking).
+        """
+        self._device_change_callbacks.append(callback)
 
     def get_devices(self) -> list[ManagedDevice]:
         """Get all cached devices (connected + available mDNS)."""
@@ -444,6 +454,13 @@ class DeviceManager:
                     logger.info("Polling recovered, resetting backoff")
                 self._consecutive_failures = 0
                 self._current_interval = self._min_interval
+
+                # Fire device change callbacks
+                for cb in self._device_change_callbacks:
+                    try:
+                        cb()
+                    except Exception as e:
+                        logger.warning(f"Device change callback error: {e}")
 
             except Exception as e:
                 self._handle_poll_error(e)

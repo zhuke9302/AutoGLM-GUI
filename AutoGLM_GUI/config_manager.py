@@ -1,6 +1,6 @@
-"""统一配置管理模块 - 四层优先级系统.
+"""统一配置管理模块 - 五层优先级系统.
 
-配置优先级：CLI 参数 > 环境变量 > 配置文件 > 默认值
+配置优先级：CLI 参数 > 环境变量 > 服务器下发 > 配置文件 > 默认值
 
 Features:
 - 类型安全的配置模型（Pydantic 验证）
@@ -38,6 +38,7 @@ class ConfigSource(StrEnum):
 
     CLI = "CLI arguments"
     ENV = "environment variables"
+    SERVER = "server"
     FILE = "config file (~/.config/autoglm/config.json)"
     DEFAULT = "default"
 
@@ -211,7 +212,7 @@ class UnifiedConfigManager:
     """
     统一配置管理器（单例模式）.
 
-    配置优先级：CLI 参数 > 环境变量 > 配置文件 > 默认值
+    配置优先级：CLI 参数 > 环境变量 > 服务器下发 > 配置文件 > 默认值
 
     Features:
     - 类型安全配置（Pydantic 验证）
@@ -237,9 +238,10 @@ class UnifiedConfigManager:
         if hasattr(self, "_initialized") and self._initialized:
             return
 
-        # 四层配置
+        # 五层配置
         self._cli_layer = ConfigLayer(source=ConfigSource.CLI)
         self._env_layer = ConfigLayer(source=ConfigSource.ENV)
+        self._server_layer = ConfigLayer(source=ConfigSource.SERVER)
         self._file_layer = ConfigLayer(source=ConfigSource.FILE)
         self._default_layer = ConfigLayer(
             base_url="",
@@ -361,6 +363,20 @@ class UnifiedConfigManager:
         )
         self._effective_config = None  # 清除缓存
         logger.debug(f"Environment config loaded: {self._env_layer.to_dict()}")
+
+    def set_server_config(self, values: dict[str, Any]) -> None:
+        """设置服务器下发的配置层（优先级：CLI > ENV > Server > FILE > DEFAULT）.
+
+        Args:
+            values: 从服务器拉取的配置键值对，仅包含服务器实际下发的字段
+        """
+        self._server_layer = ConfigLayer(
+            **values,
+            source=ConfigSource.SERVER,
+            explicit_keys=set(values.keys()),
+        )
+        self._effective_config = None  # 清除缓存
+        logger.debug(f"Server config set: {list(values.keys())}")
 
     def load_file_config(self, force_reload: bool = False) -> bool:
         """
@@ -589,7 +605,7 @@ class UnifiedConfigManager:
         """
         获取合并后的有效配置.
 
-        配置优先级：CLI > ENV > FILE > DEFAULT
+        配置优先级：CLI > ENV > SERVER > FILE > DEFAULT
 
         Args:
             reload_file: 是否强制重新加载配置文件
@@ -634,10 +650,13 @@ class UnifiedConfigManager:
             # 2. 环境变量
             elif self._env_layer.has_value(key):
                 merged[key] = getattr(self._env_layer, key)
-            # 3. 配置文件
+            # 3. 服务器下发
+            elif self._server_layer.has_value(key):
+                merged[key] = getattr(self._server_layer, key)
+            # 4. 配置文件
             elif self._file_layer.has_value(key):
                 merged[key] = getattr(self._file_layer, key)
-            # 4. 默认值（只对 base_url, model_name, api_key 有效）
+            # 5. 默认值（只对 base_url, model_name, api_key 有效）
             elif (
                 hasattr(self._default_layer, key)
                 and getattr(self._default_layer, key, None) is not None
@@ -670,6 +689,10 @@ class UnifiedConfigManager:
         if self._env_layer.to_dict():
             return ConfigSource.ENV
 
+        # 检查 SERVER 是否有值
+        if self._server_layer.to_dict():
+            return ConfigSource.SERVER
+
         # 检查 FILE 是否有值
         if self._file_layer.to_dict():
             return ConfigSource.FILE
@@ -690,6 +713,8 @@ class UnifiedConfigManager:
             return ConfigSource.CLI
         elif self._env_layer.has_value(field):
             return ConfigSource.ENV
+        elif self._server_layer.has_value(field):
+            return ConfigSource.SERVER
         elif self._file_layer.has_value(field):
             return ConfigSource.FILE
         else:

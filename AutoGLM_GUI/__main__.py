@@ -7,11 +7,17 @@ import threading
 import time
 import webbrowser
 
+from dotenv import load_dotenv
+
 from AutoGLM_GUI import __version__
 from AutoGLM_GUI.adb_terminal_repl import main as adb_terminal_repl_main
 
 # Default configuration
 DEFAULT_MODEL_NAME = "autoglm-phone-9b"
+
+# Load .env as early as possible so all subsequent os.getenv calls see values.
+# Does not override existing environment variables.
+load_dotenv()
 
 
 def find_available_port(
@@ -80,7 +86,6 @@ def main() -> None:
     # Configure logging BEFORE any other imports to ensure DEBUG level from the start
     # This is especially important for --reload mode where subprocess reimports modules
     import os
-    import sys
 
     # Parse args early to get log level
     early_parser = argparse.ArgumentParser(add_help=False)

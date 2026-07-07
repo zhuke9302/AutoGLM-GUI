@@ -896,216 +896,216 @@ export function ChatComponent() {
 
             {/* 决策模型 Tab 已禁用，仅保留视觉模型配置 */}
             {false && (
-            <TabsContent
-              value="decision"
-              className="space-y-4 mt-4 overflow-y-auto flex-1 min-h-0"
-            >
-              {/* 提示信息 */}
-              <div className="rounded-lg border border-indigo-200 bg-indigo-50 dark:border-indigo-900 dark:bg-indigo-950/30 p-3 text-sm text-indigo-900 dark:text-indigo-100">
-                <div className="flex items-start gap-2">
-                  <Info className="mt-0.5 h-4 w-4 flex-shrink-0" />
-                  <div>{t.chat.decisionModelHint}</div>
+              <TabsContent
+                value="decision"
+                className="space-y-4 mt-4 overflow-y-auto flex-1 min-h-0"
+              >
+                {/* 提示信息 */}
+                <div className="rounded-lg border border-indigo-200 bg-indigo-50 dark:border-indigo-900 dark:bg-indigo-950/30 p-3 text-sm text-indigo-900 dark:text-indigo-100">
+                  <div className="flex items-start gap-2">
+                    <Info className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                    <div>{t.chat.decisionModelHint}</div>
+                  </div>
                 </div>
-              </div>
 
-              {/* 决策模型预设配置 */}
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">
-                  {t.chat.selectDecisionPreset}
-                </Label>
-                <div className="grid grid-cols-1 gap-2">
-                  {DECISION_PRESETS.map(preset => (
-                    <div key={preset.name} className="relative">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setTempConfig(prev => ({
-                            ...prev,
-                            ...(preset.name === 'custom'
-                              ? getSelectedDecisionPreset(
-                                  prev.decision_base_url
-                                ) === 'custom'
-                                ? {}
+                {/* 决策模型预设配置 */}
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">
+                    {t.chat.selectDecisionPreset}
+                  </Label>
+                  <div className="grid grid-cols-1 gap-2">
+                    {DECISION_PRESETS.map(preset => (
+                      <div key={preset.name} className="relative">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setTempConfig(prev => ({
+                              ...prev,
+                              ...(preset.name === 'custom'
+                                ? getSelectedDecisionPreset(
+                                    prev.decision_base_url
+                                  ) === 'custom'
+                                  ? {}
+                                  : {
+                                      decision_base_url:
+                                        preset.config.decision_base_url,
+                                      decision_model_name:
+                                        preset.config.decision_model_name,
+                                    }
                                 : {
                                     decision_base_url:
                                       preset.config.decision_base_url,
                                     decision_model_name:
                                       preset.config.decision_model_name,
-                                  }
-                              : {
-                                  decision_base_url:
-                                    preset.config.decision_base_url,
-                                  decision_model_name:
-                                    preset.config.decision_model_name,
-                                }),
-                          }))
-                        }
-                        className={`w-full text-left p-3 rounded-lg border transition-all ${
-                          selectedDecisionPreset === preset.name
-                            ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/50'
-                            : 'border-slate-200 dark:border-slate-700 hover:border-indigo-500/50 hover:bg-indigo-50 dark:hover:bg-indigo-950/30'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <Server
-                            className={`w-4 h-4 ${
-                              selectedDecisionPreset === preset.name
-                                ? 'text-indigo-600 dark:text-indigo-400'
-                                : 'text-slate-400 dark:text-slate-500'
-                            }`}
-                          />
-                          <span className="font-medium text-sm text-slate-900 dark:text-slate-100">
+                                  }),
+                            }))
+                          }
+                          className={`w-full text-left p-3 rounded-lg border transition-all ${
+                            selectedDecisionPreset === preset.name
+                              ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/50'
+                              : 'border-slate-200 dark:border-slate-700 hover:border-indigo-500/50 hover:bg-indigo-50 dark:hover:bg-indigo-950/30'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <Server
+                              className={`w-4 h-4 ${
+                                selectedDecisionPreset === preset.name
+                                  ? 'text-indigo-600 dark:text-indigo-400'
+                                  : 'text-slate-400 dark:text-slate-500'
+                              }`}
+                            />
+                            <span className="font-medium text-sm text-slate-900 dark:text-slate-100">
+                              {
+                                t.presetConfigs[
+                                  preset.name as keyof typeof t.presetConfigs
+                                ].name
+                              }
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 ml-6">
                             {
                               t.presetConfigs[
                                 preset.name as keyof typeof t.presetConfigs
-                              ].name
+                              ].description
                             }
-                          </span>
-                        </div>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 ml-6">
-                          {
-                            t.presetConfigs[
-                              preset.name as keyof typeof t.presetConfigs
-                            ].description
-                          }
-                        </p>
-                      </button>
-                      {'apiKeyUrl' in preset && (
-                        <a
-                          href={preset.apiKeyUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={e => e.stopPropagation()}
-                          className="absolute top-3 right-3 p-1.5 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors group"
-                          title={t.chat.getApiKey || '获取 API Key'}
-                        >
-                          <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors" />
-                        </a>
-                      )}
-                    </div>
-                  ))}
+                          </p>
+                        </button>
+                        {'apiKeyUrl' in preset && (
+                          <a
+                            href={preset.apiKeyUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={e => e.stopPropagation()}
+                            className="absolute top-3 right-3 p-1.5 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors group"
+                            title={t.chat.getApiKey || '获取 API Key'}
+                          >
+                            <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors" />
+                          </a>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
 
-              {/* Decision Base URL */}
-              <div className="space-y-2">
-                <Label htmlFor="decision_base_url">
-                  {t.chat.decisionBaseUrl} *
-                </Label>
-                <Input
-                  id="decision_base_url"
-                  value={tempConfig.decision_base_url}
-                  onChange={e =>
-                    setTempConfig({
-                      ...tempConfig,
-                      decision_base_url: e.target.value,
-                    })
-                  }
-                  placeholder="http://localhost:8080/v1"
-                />
-              </div>
-
-              {/* Decision API Key */}
-              <div className="space-y-2">
-                <Label htmlFor="decision_api_key">
-                  {t.chat.decisionApiKey}
-                </Label>
-                <div className="relative">
+                {/* Decision Base URL */}
+                <div className="space-y-2">
+                  <Label htmlFor="decision_base_url">
+                    {t.chat.decisionBaseUrl} *
+                  </Label>
                   <Input
-                    id="decision_api_key"
-                    type={showApiKey ? 'text' : 'password'}
-                    value={tempConfig.decision_api_key}
+                    id="decision_base_url"
+                    value={tempConfig.decision_base_url}
                     onChange={e =>
                       setTempConfig({
                         ...tempConfig,
-                        decision_api_key: e.target.value,
+                        decision_base_url: e.target.value,
                       })
                     }
-                    placeholder="sk-..."
-                    className="pr-10"
+                    placeholder="http://localhost:8080/v1"
                   />
+                </div>
+
+                {/* Decision API Key */}
+                <div className="space-y-2">
+                  <Label htmlFor="decision_api_key">
+                    {t.chat.decisionApiKey}
+                  </Label>
+                  <div className="relative">
+                    <Input
+                      id="decision_api_key"
+                      type={showApiKey ? 'text' : 'password'}
+                      value={tempConfig.decision_api_key}
+                      onChange={e =>
+                        setTempConfig({
+                          ...tempConfig,
+                          decision_api_key: e.target.value,
+                        })
+                      }
+                      placeholder="sk-..."
+                      className="pr-10"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setShowApiKey(!showApiKey)}
+                      className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                    >
+                      {showApiKey ? (
+                        <EyeOff className="w-4 h-4 text-slate-400" />
+                      ) : (
+                        <Eye className="w-4 h-4 text-slate-400" />
+                      )}
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Decision Model Name */}
+                <div className="space-y-2">
+                  <Label htmlFor="decision_model_name">
+                    {t.chat.decisionModelName} *
+                  </Label>
+                  <Input
+                    id="decision_model_name"
+                    value={tempConfig.decision_model_name}
+                    onChange={e =>
+                      setTempConfig({
+                        ...tempConfig,
+                        decision_model_name: e.target.value,
+                      })
+                    }
+                    placeholder=""
+                  />
+                </div>
+
+                {/* Decision Model 连通性测试 */}
+                <div className="space-y-2">
                   <Button
                     type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setShowApiKey(!showApiKey)}
-                    className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                    variant="outline"
+                    size="sm"
+                    disabled={
+                      decisionConnectionTesting ||
+                      !tempConfig.decision_base_url ||
+                      !tempConfig.decision_model_name
+                    }
+                    onClick={() =>
+                      handleModelConnectionCheck(
+                        tempConfig.decision_base_url,
+                        tempConfig.decision_model_name,
+                        tempConfig.decision_api_key,
+                        'decision'
+                      )
+                    }
+                    className="w-full"
                   >
-                    {showApiKey ? (
-                      <EyeOff className="w-4 h-4 text-slate-400" />
+                    {decisionConnectionTesting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        {t.chat.testingConnection}
+                      </>
                     ) : (
-                      <Eye className="w-4 h-4 text-slate-400" />
+                      t.chat.testConnection
                     )}
                   </Button>
-                </div>
-              </div>
-
-              {/* Decision Model Name */}
-              <div className="space-y-2">
-                <Label htmlFor="decision_model_name">
-                  {t.chat.decisionModelName} *
-                </Label>
-                <Input
-                  id="decision_model_name"
-                  value={tempConfig.decision_model_name}
-                  onChange={e =>
-                    setTempConfig({
-                      ...tempConfig,
-                      decision_model_name: e.target.value,
-                    })
-                  }
-                  placeholder=""
-                />
-              </div>
-
-              {/* Decision Model 连通性测试 */}
-              <div className="space-y-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={
-                    decisionConnectionTesting ||
-                    !tempConfig.decision_base_url ||
-                    !tempConfig.decision_model_name
-                  }
-                  onClick={() =>
-                    handleModelConnectionCheck(
-                      tempConfig.decision_base_url,
-                      tempConfig.decision_model_name,
-                      tempConfig.decision_api_key,
-                      'decision'
-                    )
-                  }
-                  className="w-full"
-                >
-                  {decisionConnectionTesting ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      {t.chat.testingConnection}
-                    </>
-                  ) : (
-                    t.chat.testConnection
+                  {decisionConnectionResult && (
+                    <p
+                      className={`text-xs flex items-center gap-1 ${
+                        decisionConnectionResult.success
+                          ? 'text-green-600 dark:text-green-400'
+                          : 'text-red-500 dark:text-red-400'
+                      }`}
+                    >
+                      {decisionConnectionResult.success ? (
+                        <CheckCircle2 className="w-3 h-3" />
+                      ) : (
+                        <AlertCircle className="w-3 h-3" />
+                      )}
+                      {decisionConnectionResult.message}
+                    </p>
                   )}
-                </Button>
-                {decisionConnectionResult && (
-                  <p
-                    className={`text-xs flex items-center gap-1 ${
-                      decisionConnectionResult.success
-                        ? 'text-green-600 dark:text-green-400'
-                        : 'text-red-500 dark:text-red-400'
-                    }`}
-                  >
-                    {decisionConnectionResult.success ? (
-                      <CheckCircle2 className="w-3 h-3" />
-                    ) : (
-                      <AlertCircle className="w-3 h-3" />
-                    )}
-                    {decisionConnectionResult.message}
-                  </p>
-                )}
-              </div>
-            </TabsContent>
+                </div>
+              </TabsContent>
             )}
           </Tabs>
 

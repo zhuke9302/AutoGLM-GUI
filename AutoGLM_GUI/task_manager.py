@@ -50,6 +50,11 @@ class TaskManager:
     def register_executor(self, executor_key: str, executor: TaskExecutor) -> None:
         self._executors[executor_key] = executor
 
+    def get_running_task_count(self) -> int:
+        """Return the number of currently running tasks."""
+        _, count = self.store.list_tasks(status=TaskStatus.RUNNING.value, limit=1)
+        return count
+
     async def start(self) -> None:
         if self._started:
             return

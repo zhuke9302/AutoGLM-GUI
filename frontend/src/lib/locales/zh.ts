@@ -320,6 +320,10 @@ export const zh = {
     terminal: '终端',
     backToHome: '返回首页',
   },
+  syncStatus: {
+    connected: '已连接',
+    offline: '离线',
+  },
   terminal: {
     title: 'Web Terminal',
     subtitle: '在浏览器里直接执行 ADB 命令',

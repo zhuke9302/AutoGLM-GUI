@@ -330,6 +330,10 @@ export const en = {
     terminal: 'Terminal',
     backToHome: 'Back to Home',
   },
+  syncStatus: {
+    connected: 'Connected',
+    offline: 'Offline',
+  },
   terminal: {
     title: 'Web Terminal',
     subtitle: 'Run ADB commands directly in the browser',
