@@ -5,6 +5,8 @@ import json
 import logging
 from typing import TYPE_CHECKING
 
+from loguru import logger
+
 from AutoGLM_GUI.sync.client import ServerClient, ServerUnavailableError
 from AutoGLM_GUI.sync.schemas import SyncConfig
 from AutoGLM_GUI.sync.registration import SyncRegistration
@@ -20,8 +22,6 @@ if TYPE_CHECKING:
     from AutoGLM_GUI.scheduler_manager import SchedulerManager
     from AutoGLM_GUI.workflow_manager import WorkflowManager
     from AutoGLM_GUI.config_manager import UnifiedConfigManager
-
-logger = logging.getLogger(__name__)
 
 
 class SyncManager:
@@ -79,7 +79,7 @@ class SyncManager:
             logger.info("Server URL not configured, running in standalone mode")
             return
 
-        logger.info("Starting sync subsystem, server_url=%s", self._config.server_url)
+        logger.info("Starting sync subsystem, server_url={}", self._config.server_url)
 
         # Initialize HTTP client
         self._client = ServerClient(
@@ -222,6 +222,13 @@ class SyncManager:
                     req = TaskEventBatchRequest.model_validate(payload)
                     # task_events need a task_run_id; extract from payload
                     task_run_id = payload.get("task_run_id", "")
+                    if not task_run_id:
+                        logger.warning(
+                            "离线队列 item #{} 缺少 task_run_id，丢弃",
+                            item.id,
+                        )
+                        self._offline_queue.pop(item.id)
+                        continue
                     await self._client.report_task_events_batch(task_run_id, req)
                 elif item.item_type == "device_report":
                     from AutoGLM_GUI.sync.schemas import DeviceReportRequest
@@ -243,7 +250,7 @@ class SyncManager:
                 logger.debug("Server unavailable during replay, will retry later")
                 break
             except Exception as e:
-                logger.error("Failed to replay offline queue item #%d: %s", item.id, e)
+                logger.error("Failed to replay offline queue item #{}: {}", item.id, e)
                 self._offline_queue.increment_retry(item.id)
 
     def get_status(self) -> dict:

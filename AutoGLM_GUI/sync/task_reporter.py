@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import logging
 from datetime import datetime
 from typing import TYPE_CHECKING
@@ -106,7 +107,7 @@ class TaskReporter:
         except ServerUnavailableError:
             logger.warning("Server unavailable, queuing task run report for later")
             if self._offline_queue:
-                self._offline_queue.push("task_run", req.model_dump())
+                self._offline_queue.push("task_run", req.model_dump(by_alias=True))
             return False
         except Exception as e:
             logger.error("Failed to report task run %s: %s", task_id, e)
@@ -129,13 +130,16 @@ class TaskReporter:
                 batch = events[i : i + self._batch_size]
                 items = []
                 for evt in batch:
+                    payload = evt.get("payload")
+                    if isinstance(payload, dict):
+                        payload = await self._extract_screenshot(
+                            task_id, evt.get("seq"), payload
+                        )
                     item = TaskEventBatchItem(
                         seq=evt["seq"],
                         event_type=evt["event_type"],
                         role=evt.get("role"),
-                        payload=evt["payload"]
-                        if isinstance(evt.get("payload"), dict)
-                        else {},
+                        payload=payload if isinstance(payload, dict) else {},
                         created_at=evt.get("created_at", ""),
                     )
                     items.append(item)
@@ -154,7 +158,9 @@ class TaskReporter:
                         "Server unavailable, queuing events report for later"
                     )
                     if self._offline_queue:
-                        self._offline_queue.push("task_events", req.model_dump())
+                        payload = req.model_dump(by_alias=True)
+                        payload["task_run_id"] = task_id
+                        self._offline_queue.push("task_events", payload)
                     all_success = False
                     break
                 except Exception as e:
@@ -168,6 +174,43 @@ class TaskReporter:
         except Exception as e:
             logger.error("Failed to report events for task %s: %s", task_id, e)
             return False
+
+    async def _extract_screenshot(
+        self, task_id: str, seq: int | None, payload: dict
+    ) -> dict:
+        """将 step 事件中的截图 base64 预上传到网关 S3，替换为 screenshot_url。
+
+        预上传失败时也删除 screenshot 字段，避免 base64 数据经过
+        WebSocket 隧道导致缓冲区溢出。
+        """
+        screenshot_b64 = payload.get("screenshot")
+        if not screenshot_b64 or not isinstance(screenshot_b64, str):
+            return payload
+        try:
+            image_bytes = base64.b64decode(screenshot_b64)
+            url = await self._client.upload_screenshot_to_s3(
+                image_bytes, task_id, seq or 0
+            )
+            if url:
+                new_payload = {k: v for k, v in payload.items() if k != "screenshot"}
+                new_payload["screenshot_url"] = url
+                logger.debug(
+                    "截图预上传S3成功 | task=%s | seq=%s | url=%s",
+                    task_id,
+                    seq,
+                    url,
+                )
+                return new_payload
+        except Exception as e:
+            logger.warning(
+                "截图预上传S3失败，丢弃原始base64数据 | task=%s | error=%s",
+                task_id,
+                e,
+            )
+        # 预上传失败或返回空 URL，删除 screenshot 字段避免隧道溢出
+        new_payload = {k: v for k, v in payload.items() if k != "screenshot"}
+        new_payload["screenshot_upload_failed"] = True
+        return new_payload
 
     async def upload_screenshot(
         self, image_data: bytes, task_id: str, filename: str = "screenshot.png"

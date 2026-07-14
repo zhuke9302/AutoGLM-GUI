@@ -2,6 +2,7 @@
 Centralized logging configuration using loguru.
 """
 
+import logging
 import sys
 from pathlib import Path
 from loguru import logger
@@ -11,6 +12,29 @@ logger.remove()
 
 # Default configuration - will be overridden by configure_logger()
 _configured = False
+
+
+class InterceptHandler(logging.Handler):
+    """Bridge standard logging to loguru so logging.getLogger() logs are visible."""
+
+    def emit(self, record: logging.LogRecord) -> None:
+        # Get loguru level matching the record's level name
+        try:
+            level: str | int = logger.level(record.levelname).name
+        except ValueError:
+            level = record.levelno
+
+        # Find caller from where the log message originated
+        frame, depth = logging.currentframe(), 2
+        while frame and frame.f_code.co_filename == logging.__file__:
+            frame = frame.f_back
+            depth += 1
+
+        logger.opt(depth=depth, exception=record.exc_info).log(level, record.getMessage())
+
+
+# Install intercept handler on the root standard logger
+logging.basicConfig(handlers=[InterceptHandler()], level=0, force=True)
 
 
 def configure_logger(

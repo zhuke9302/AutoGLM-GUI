@@ -1,0 +1,49 @@
+# Checklist
+
+- [x] 网关项目脚手架创建完成，Maven 项目初始化，pom.xml 依赖配置正确
+- [x] GatewayProperties 配置属性绑定正确：application.yml + 环境变量覆盖，所有配置项可正常读取
+- [x] 隧道协议定义完整：10 种消息类型（http_request、http_response、sse_event、sse_broadcast、sse_subscribe、sse_unsubscribe、file_uploaded、file_ack、ping、pong）
+- [x] 隧道连接管理正确：Tunnel Key 认证、请求路由、响应分发、保活、断开处理
+- [x] 隧道 WebSocket 端点正确：TunnelHandler 升级连接、消息读写、响应分发、事件转发、file_ack 处理
+- [x] JWT 验证拦截器正确：有效 JWT 通过，无效/过期 JWT 返回 401，注册接口免验证
+- [x] JWT 验证使用与服务端相同的 jjwt 库和 HMAC-SHA256 算法和密钥
+- [x] 速率限制拦截器正确：超限返回 429
+- [x] 客户端 HTTP 代理正确：请求序列化为隧道消息，通过隧道转发，响应反序列化返回
+- [x] 文件上传请求不通过隧道转发，改由文件暂存模块处理
+- [x] 隧道未建立返回 502，转发超时返回 504
+- [x] 文件暂存管理正确：保存文件到本地磁盘，生成 file_id，记录元数据
+- [x] 客户端上传文件后网关立即返回 URL + file_id
+- [x] 文件上传后通过隧道发送 file_uploaded 通知给服务端
+- [x] 服务端可通过 GET /api/v1/files/{file_id} 拉取暂存文件（Tunnel Key 验证）
+- [x] 收到 file_ack 后网关删除暂存文件
+- [x] 超过 24 小时未确认的暂存文件自动清理（@Scheduled）
+- [x] 文件不存在时返回 404
+- [x] SSE 连接管理正确：按 client_id 索引（ConcurrentHashMap），连接数限制（每 client_id 最多 1 个）
+- [x] SSE 事件转发正确：sse_event 转发给指定客户端，sse_broadcast 广播
+- [ ] SSE 中继延迟 < 100ms
+- [x] 客户端 SSE 断开时发送 sse_unsubscribe 给隧道
+- [x] 隧道断开时 SSE 保活：@Scheduled 定期 ping，隧道重连后重新 subscribe
+- [x] 健康检查端点正确：返回隧道连接状态
+- [x] TLS 终止正确：Spring Boot server.ssl 配置 HTTPS 监听
+- [x] 无证书时纯 HTTP 模式正常工作
+- [x] 请求日志记录完整（method、path、status、latency）
+- [x] Dockerfile 多阶段构建正确（Eclipse Temurin JDK 17 + Maven），镜像可正常运行
+- [x] docker-compose.yml 配置正确，环境变量注入正常
+- [x] application-example.yml 示例配置完整
+- [x] 服务端 TunnelClient 正确建立 WebSocket 隧道，携带 X-Tunnel-Key 认证
+- [x] 服务端 TunnelClient 接收 http_request 并转发到本地 API，响应通过隧道返回
+- [x] 服务端 TunnelClient 接收 file_uploaded 通知，通过出站 HTTP GET 拉取暂存文件，存储后发送 file_ack
+- [x] 服务端 TunnelClient 隧道断开自动重连（指数退避）
+- [x] 服务端 TunnelClient 保活：收到 ping 回复 pong
+- [x] 服务端 TunnelEventSender 通过隧道发送 sse_event 和 sse_broadcast 消息
+- [x] 隧道模式下 SseEmitterManager 调用点替换为 TunnelEventSender
+- [x] ClientSseController 隧道模式下不再创建 SseEmitter
+- [x] 未配置隧道 URL 时服务端保持直连模式正常
+- [x] ClientProperties 新增 gatewayTunnelUrl 和 tunnelKey 字段
+- [x] application.yml 新增 falcon.client.gateway-tunnel-url 和 falcon.client.tunnel-key 配置项
+- [ ] 客户端通过网关（隧道模式）注册、心跳、同步数据正常
+- [ ] SSE 事件通过隧道正确中继到客户端
+- [ ] 文件上传完整流程：客户端上传 → 网关暂存 → 通知服务端 → 服务端拉取 → 确认 → 网关删除
+- [ ] 网关 JWT 验证拒绝无效请求，不到达服务端
+- [ ] 隧道断开重连后数据恢复正常
+- [ ] 文件自动清理：超过 24 小时未确认的暂存文件被自动删除

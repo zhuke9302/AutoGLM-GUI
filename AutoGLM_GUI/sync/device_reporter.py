@@ -31,7 +31,7 @@ class DeviceReporter:
         self._client = client
         self._device_manager = device_manager
         self._offline_queue = offline_queue
-        self._last_reported_serials: set[str] = set()
+        self._last_reported_fingerprint: set[tuple[str, str]] = set()
         self._poll_task: asyncio.Task | None = None
         self._poll_interval: float = (
             60.0  # Fallback poll interval (primary is event-driven)
@@ -58,9 +58,9 @@ class DeviceReporter:
             pass
 
     def _schedule_report_if_changed(self) -> None:
-        """Schedule a device report if the device set has changed."""
-        current_serials = {dev.serial for dev in self._device_manager.get_devices()}
-        if current_serials != self._last_reported_serials:
+        """Schedule a device report if the device set or status has changed."""
+        current_fingerprint = self._device_fingerprint()
+        if current_fingerprint != self._last_reported_fingerprint:
             asyncio.ensure_future(self.report_all_devices())
 
     async def stop(self) -> None:
@@ -100,13 +100,13 @@ class DeviceReporter:
                 devices=items,
             )
             resp = await self._client.report_devices(req)
-            self._last_reported_serials = {dev.serial for dev in devices}
+            self._last_reported_fingerprint = self._device_fingerprint()
             logger.debug("Reported %d devices to server", len(items))
             return resp
         except ServerUnavailableError:
             logger.warning("Server unavailable, queuing device report for later")
             if self._offline_queue:
-                self._offline_queue.push("device_report", req.model_dump())
+                self._offline_queue.push("device_report", req.model_dump(by_alias=True))
             return None
         except Exception as e:
             logger.error("Failed to report devices: %s", e)
@@ -117,16 +117,21 @@ class DeviceReporter:
         while True:
             try:
                 await asyncio.sleep(self._poll_interval)
-                # Check if devices have changed
-                current_serials = {
-                    dev.serial for dev in self._device_manager.get_devices()
-                }
-                if current_serials != self._last_reported_serials:
+                # Check if device set or status has changed
+                current_fingerprint = self._device_fingerprint()
+                if current_fingerprint != self._last_reported_fingerprint:
                     await self.report_all_devices()
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 logger.error("Device poll error: %s", e)
+
+    def _device_fingerprint(self) -> set[tuple[str, str]]:
+        """Build a fingerprint of device serials and statuses for change detection."""
+        return {
+            (dev.serial, self._map_device_status(dev))
+            for dev in self._device_manager.get_devices()
+        }
 
     @staticmethod
     def _map_connection_type(dev) -> str:

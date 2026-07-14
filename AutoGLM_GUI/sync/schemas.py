@@ -4,6 +4,20 @@ from enum import StrEnum
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
+from pydantic.alias_generators import to_camel
+
+
+class SyncBaseModel(BaseModel):
+    """Base model with camelCase alias support for server compatibility.
+
+    Field names use snake_case (Python convention), but the server uses
+    camelCase (Java/Jackson convention). This base model configures
+    ``alias_generator=to_camel`` and ``populate_by_name=True`` so that
+    both snake_case and camelCase keys are accepted on input, and
+    ``model_dump(by_alias=True)`` produces camelCase for server requests.
+    """
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 
 # ---------------------------------------------------------------------------
@@ -11,26 +25,20 @@ from pydantic import BaseModel, ConfigDict
 # ---------------------------------------------------------------------------
 
 
-class ClientRegisterRequest(BaseModel):
-    model_config = ConfigDict()
-
+class ClientRegisterRequest(SyncBaseModel):
     hostname: str
     ip: str
     os: str
     version: str
 
 
-class ClientRegisterResponse(BaseModel):
-    model_config = ConfigDict()
-
+class ClientRegisterResponse(SyncBaseModel):
     client_id: str
     token: str
     heartbeat_interval_seconds: int = 30
 
 
-class ClientHeartbeatRequest(BaseModel):
-    model_config = ConfigDict()
-
+class ClientHeartbeatRequest(SyncBaseModel):
     timestamp: str
     device_count: int
     running_task_count: int
@@ -38,9 +46,7 @@ class ClientHeartbeatRequest(BaseModel):
     error_message: str | None = None
 
 
-class ClientHeartbeatResponse(BaseModel):
-    model_config = ConfigDict()
-
+class ClientHeartbeatResponse(SyncBaseModel):
     ack: bool
     config_changes: bool
     task_changes: bool
@@ -51,9 +57,7 @@ class ClientHeartbeatResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-class DeviceReportItem(BaseModel):
-    model_config = ConfigDict()
-
+class DeviceReportItem(SyncBaseModel):
     serial: str
     model: str
     connection_type: Literal["usb", "wifi", "remote"]
@@ -64,16 +68,12 @@ class DeviceReportItem(BaseModel):
     agent_model_name: str | None = None
 
 
-class DeviceReportRequest(BaseModel):
-    model_config = ConfigDict()
-
+class DeviceReportRequest(SyncBaseModel):
     timestamp: str
     devices: list[DeviceReportItem]
 
 
-class DeviceReportResponse(BaseModel):
-    model_config = ConfigDict()
-
+class DeviceReportResponse(SyncBaseModel):
     ack: bool
 
 
@@ -82,9 +82,7 @@ class DeviceReportResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-class ScheduledTaskSyncItem(BaseModel):
-    model_config = ConfigDict()
-
+class ScheduledTaskSyncItem(SyncBaseModel):
     id: str
     name: str
     workflow_uuid: str
@@ -96,17 +94,13 @@ class ScheduledTaskSyncItem(BaseModel):
     updated_at: str
 
 
-class ScheduledTaskSyncResponse(BaseModel):
-    model_config = ConfigDict()
-
+class ScheduledTaskSyncResponse(SyncBaseModel):
     tasks: list[ScheduledTaskSyncItem]
     deleted_ids: list[str]
     server_time: str
 
 
-class ExecutionReportRequest(BaseModel):
-    model_config = ConfigDict()
-
+class ExecutionReportRequest(SyncBaseModel):
     fire_id: str
     timestamp: str
     device_serial: str
@@ -117,9 +111,7 @@ class ExecutionReportRequest(BaseModel):
     duration_ms: int
 
 
-class ExecutionReportResponse(BaseModel):
-    model_config = ConfigDict()
-
+class ExecutionReportResponse(SyncBaseModel):
     ack: bool
 
 
@@ -128,18 +120,14 @@ class ExecutionReportResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-class WorkflowSyncItem(BaseModel):
-    model_config = ConfigDict()
-
+class WorkflowSyncItem(SyncBaseModel):
     uuid: str
     name: str
     text: str
     updated_at: str
 
 
-class WorkflowSyncResponse(BaseModel):
-    model_config = ConfigDict()
-
+class WorkflowSyncResponse(SyncBaseModel):
     workflows: list[WorkflowSyncItem]
     deleted_uuids: list[str]
     server_time: str
@@ -150,15 +138,13 @@ class WorkflowSyncResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-class ServerConfigResponse(BaseModel):
-    model_config = ConfigDict()
-
+class ServerConfigResponse(SyncBaseModel):
     base_url: str | None = None
     model_name: str | None = None
     api_key: str | None = None
     agent_type: str | None = None
     default_max_steps: int | None = None
-    updated_at: str
+    updated_at: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -166,9 +152,7 @@ class ServerConfigResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-class TaskRunReportRequest(BaseModel):
-    model_config = ConfigDict()
-
+class TaskRunReportRequest(SyncBaseModel):
     task_run_id: str
     source: Literal["chat", "scheduled"]
     session_id: str | None = None
@@ -187,15 +171,11 @@ class TaskRunReportRequest(BaseModel):
     duration_ms: int
 
 
-class TaskRunReportResponse(BaseModel):
-    model_config = ConfigDict()
-
+class TaskRunReportResponse(SyncBaseModel):
     ack: bool
 
 
-class TaskEventBatchItem(BaseModel):
-    model_config = ConfigDict()
-
+class TaskEventBatchItem(SyncBaseModel):
     seq: int
     event_type: str
     role: str | None = None
@@ -203,22 +183,16 @@ class TaskEventBatchItem(BaseModel):
     created_at: str
 
 
-class TaskEventBatchRequest(BaseModel):
-    model_config = ConfigDict()
-
+class TaskEventBatchRequest(SyncBaseModel):
     events: list[TaskEventBatchItem]
 
 
-class TaskEventBatchResponse(BaseModel):
-    model_config = ConfigDict()
-
+class TaskEventBatchResponse(SyncBaseModel):
     ack: bool
     last_seq: int
 
 
-class UploadResponse(BaseModel):
-    model_config = ConfigDict()
-
+class UploadResponse(SyncBaseModel):
     url: str
     file_id: str
 
@@ -240,37 +214,27 @@ class SSEEventType(StrEnum):
 SSEAction = Literal["created", "updated", "deleted"]
 
 
-class SSEScheduledTaskChanged(BaseModel):
-    model_config = ConfigDict()
-
+class SSEScheduledTaskChanged(SyncBaseModel):
     action: SSEAction
     id: str
     updated_at: str
 
 
-class SSEWorkflowChanged(BaseModel):
-    model_config = ConfigDict()
-
+class SSEWorkflowChanged(SyncBaseModel):
     action: SSEAction
     uuid: str
     updated_at: str
 
 
-class SSEConfigChanged(BaseModel):
-    model_config = ConfigDict()
-
+class SSEConfigChanged(SyncBaseModel):
     updated_at: str
 
 
-class SSETaskCancel(BaseModel):
-    model_config = ConfigDict()
-
+class SSETaskCancel(SyncBaseModel):
     task_run_id: str
 
 
-class SSETaskDispatch(BaseModel):
-    model_config = ConfigDict()
-
+class SSETaskDispatch(SyncBaseModel):
     scheduled_task_id: str
     fire_id: str
     device_serialnos: list[str]
@@ -281,9 +245,7 @@ class SSETaskDispatch(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-class TaskRunListItem(BaseModel):
-    model_config = ConfigDict()
-
+class TaskRunListItem(SyncBaseModel):
     task_run_id: str
     device_serial: str
     status: str
@@ -292,9 +254,7 @@ class TaskRunListItem(BaseModel):
     step_count: int
 
 
-class TaskRunListResponse(BaseModel):
-    model_config = ConfigDict()
-
+class TaskRunListResponse(SyncBaseModel):
     task_runs: list[TaskRunListItem]
 
 
@@ -303,9 +263,7 @@ class TaskRunListResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-class SyncConfig(BaseModel):
-    model_config = ConfigDict()
-
+class SyncConfig(SyncBaseModel):
     server_url: str | None = None
     heartbeat_interval_seconds: int = 30
     offline_queue_capacity: int = 1000

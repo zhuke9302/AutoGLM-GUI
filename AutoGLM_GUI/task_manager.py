@@ -571,6 +571,11 @@ class TaskManager:
                         event_type = event["type"]
                         event_data = dict(event.get("data", {}))
 
+                        # Skip thinking events – they are too granular for
+                        # persistent storage (one per streaming token).
+                        if event_type == "thinking":
+                            continue
+
                         if event_type == "step":
                             step_count = max(step_count, int(event_data.get("step", 0)))
                             timings = trace_module.get_step_timing_summary(
@@ -898,17 +903,10 @@ class TaskManager:
                     async for event in agent.stream(task["input_text"]):
                         event_type = event["type"]
                         event_data = dict(event.get("data", {}))
+                        # Skip thinking events – too granular for storage.
                         if event_type == "thinking":
-                            await self._append_task_event(
-                                task_id=task_id,
-                                event_type="thinking",
-                                payload=event_data,
-                                role="assistant",
-                                trace_id=trace_id,
-                                replay_source="scheduled",
-                                task=task,
-                            )
-                        elif event_type == "step":
+                            continue
+                        if event_type == "step":
                             step_count = max(
                                 step_count,
                                 int(event_data.get("step", 0)),

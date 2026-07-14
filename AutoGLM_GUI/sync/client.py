@@ -37,23 +37,35 @@ class ServerUnavailableError(Exception):
     pass
 
 
+class ServerAPIError(Exception):
+    """Raised when the server returns a non-success Result code."""
+
+    def __init__(self, code: int, message: str):
+        self.code = code
+        self.message = message
+        super().__init__(f"Server API error: code={code}, message={message}")
+
+
 class ServerClient:
     """Async HTTP client for server-side management system API."""
 
     def __init__(
         self,
         server_url: str,
+        sse_url: str | None = None,
         timeout: float = 30.0,
         max_retries: int = 3,
         retry_delay: float = 1.0,
     ):
         self._server_url = server_url.rstrip("/")
+        self._sse_url = sse_url.rstrip("/") if sse_url else None
         self._timeout = timeout
         self._max_retries = max_retries
         self._retry_delay = retry_delay
         self._client_id: str | None = None
         self._token: str | None = None
         self._client: httpx.AsyncClient | None = None
+        self._sse_client: httpx.AsyncClient | None = None
 
     @property
     def client_id(self) -> str | None:
@@ -82,6 +94,8 @@ class ServerClient:
         self._token = token
         if self._client:
             self._client.headers["Authorization"] = f"Bearer {token}"
+        if self._sse_client:
+            self._sse_client.headers["Authorization"] = f"Bearer {token}"
 
     def _require_registered(self) -> None:
         """Raise RuntimeError if the client is not registered."""
@@ -93,7 +107,8 @@ class ServerClient:
         if self._client is None:
             raise RuntimeError("Client is not started. Call start() first.")
 
-        # Gzip compress large JSON bodies for POST/PUT requests
+        # 对大于 1KB 的 JSON body 进行 gzip 压缩。
+        # 服务端必须配置 GzipRequestFilter 解压请求体（按 Content-Encoding: gzip 头判断）。
         json_body = kwargs.pop("json", None)
         if json_body is not None:
             body_bytes = json.dumps(json_body).encode("utf-8")
@@ -157,6 +172,26 @@ class ServerClient:
             f"Server unavailable after {self._max_retries} retries: {last_exc}"
         )
 
+    async def _request_json(self, method: str, path: str, **kwargs: Any) -> Any:
+        """Make an HTTP request and unwrap the Result envelope.
+
+        The server wraps all responses in ``Result<T>`` with fields
+        ``{code, message, data, timestamp}``. This method extracts the
+        inner ``data`` field and raises ``ServerAPIError`` if the code
+        is non-zero.
+        """
+        response = await self._request(method, path, **kwargs)
+        body = response.json()
+        # Unwrap Result envelope: {code, message, data, timestamp}
+        if isinstance(body, dict) and "code" in body and "data" in body:
+            code = body.get("code")
+            if code != 0:
+                msg = body.get("message", "Unknown error")
+                raise ServerAPIError(code, msg)
+            return body.get("data")
+        # If not wrapped in Result, return as-is
+        return body
+
     # --- Group 1: Registration & Heartbeat ---
 
     async def register(self, req: ClientRegisterRequest) -> ClientRegisterResponse:
@@ -164,10 +199,9 @@ class ServerClient:
         if self._client is None:
             raise RuntimeError("Client is not started. Call start() first.")
 
-        response = await self._request(
-            "POST", "/api/v1/clients/register", json=req.model_dump()
+        data = await self._request_json(
+            "POST", "/api/v1/clients/register", json=req.model_dump(by_alias=True)
         )
-        data = response.json()
         result = ClientRegisterResponse.model_validate(data)
         self._client_id = result.client_id
         self._set_auth(result.token)
@@ -176,24 +210,24 @@ class ServerClient:
     async def heartbeat(self, req: ClientHeartbeatRequest) -> ClientHeartbeatResponse:
         """POST /api/v1/clients/{client_id}/heartbeat"""
         self._require_registered()
-        response = await self._request(
+        data = await self._request_json(
             "POST",
             f"/api/v1/clients/{self._client_id}/heartbeat",
-            json=req.model_dump(),
+            json=req.model_dump(by_alias=True),
         )
-        return ClientHeartbeatResponse.model_validate(response.json())
+        return ClientHeartbeatResponse.model_validate(data)
 
     # --- Group 2: Device Report ---
 
     async def report_devices(self, req: DeviceReportRequest) -> DeviceReportResponse:
         """POST /api/v1/clients/{client_id}/devices/report"""
         self._require_registered()
-        response = await self._request(
+        data = await self._request_json(
             "POST",
             f"/api/v1/clients/{self._client_id}/devices/report",
-            json=req.model_dump(),
+            json=req.model_dump(by_alias=True),
         )
-        return DeviceReportResponse.model_validate(response.json())
+        return DeviceReportResponse.model_validate(data)
 
     # --- Group 3: Scheduled Task Sync ---
 
@@ -205,24 +239,24 @@ class ServerClient:
         params: dict[str, Any] = {}
         if since is not None:
             params["since"] = since
-        response = await self._request(
+        data = await self._request_json(
             "GET",
             f"/api/v1/clients/{self._client_id}/scheduled-tasks",
             params=params,
         )
-        return ScheduledTaskSyncResponse.model_validate(response.json())
+        return ScheduledTaskSyncResponse.model_validate(data)
 
     async def report_execution(
         self, task_id: str, req: ExecutionReportRequest
     ) -> ExecutionReportResponse:
         """POST /api/v1/clients/{client_id}/scheduled-tasks/{task_id}/execution-report"""
         self._require_registered()
-        response = await self._request(
+        data = await self._request_json(
             "POST",
             f"/api/v1/clients/{self._client_id}/scheduled-tasks/{task_id}/execution-report",
-            json=req.model_dump(),
+            json=req.model_dump(by_alias=True),
         )
-        return ExecutionReportResponse.model_validate(response.json())
+        return ExecutionReportResponse.model_validate(data)
 
     # --- Group 4: Workflow Sync ---
 
@@ -232,47 +266,47 @@ class ServerClient:
         params: dict[str, Any] = {}
         if since is not None:
             params["since"] = since
-        response = await self._request(
+        data = await self._request_json(
             "GET",
             f"/api/v1/clients/{self._client_id}/workflows",
             params=params,
         )
-        return WorkflowSyncResponse.model_validate(response.json())
+        return WorkflowSyncResponse.model_validate(data)
 
     # --- Group 5: Config Sync ---
 
     async def pull_config(self) -> ServerConfigResponse:
         """GET /api/v1/clients/{client_id}/config"""
         self._require_registered()
-        response = await self._request(
+        data = await self._request_json(
             "GET",
             f"/api/v1/clients/{self._client_id}/config",
         )
-        return ServerConfigResponse.model_validate(response.json())
+        return ServerConfigResponse.model_validate(data)
 
     # --- Group 6: Task Run Report ---
 
     async def report_task_run(self, req: TaskRunReportRequest) -> TaskRunReportResponse:
         """POST /api/v1/clients/{client_id}/task-runs/report"""
         self._require_registered()
-        response = await self._request(
+        data = await self._request_json(
             "POST",
             f"/api/v1/clients/{self._client_id}/task-runs/report",
-            json=req.model_dump(),
+            json=req.model_dump(by_alias=True),
         )
-        return TaskRunReportResponse.model_validate(response.json())
+        return TaskRunReportResponse.model_validate(data)
 
     async def report_task_events_batch(
         self, task_run_id: str, req: TaskEventBatchRequest
     ) -> TaskEventBatchResponse:
         """POST /api/v1/clients/{client_id}/task-runs/{task_run_id}/events/batch"""
         self._require_registered()
-        response = await self._request(
+        data = await self._request_json(
             "POST",
             f"/api/v1/clients/{self._client_id}/task-runs/{task_run_id}/events/batch",
-            json=req.model_dump(),
+            json=req.model_dump(by_alias=True),
         )
-        return TaskEventBatchResponse.model_validate(response.json())
+        return TaskEventBatchResponse.model_validate(data)
 
     async def upload_file(
         self,
@@ -303,7 +337,50 @@ class ServerClient:
             data=data,
             headers=headers,
         )
-        return UploadResponse.model_validate(response.json())
+        body = response.json()
+        # Unwrap Result envelope
+        if isinstance(body, dict) and "code" in body and "data" in body:
+            if body.get("code") != 0:
+                raise ServerAPIError(body.get("code", -1), body.get("message", ""))
+            body = body.get("data")
+        return UploadResponse.model_validate(body)
+
+    async def upload_screenshot_to_s3(
+        self,
+        image_data: bytes,
+        task_run_id: str,
+        seq: int,
+        filename: str = "screenshot.png",
+    ) -> str | None:
+        """POST /api/v1/clients/{client_id}/screenshots/upload (multipart)
+
+        Upload a screenshot to S3 via the gateway, returning the S3 URL.
+        This bypasses the WebSocket tunnel, avoiding buffer overflow.
+        """
+        self._require_registered()
+        if self._client is None:
+            raise RuntimeError("Client is not started. Call start() first.")
+
+        files = {"file": (filename, image_data, "image/png")}
+        data = {"task_run_id": task_run_id, "seq": str(seq)}
+
+        # 临时移除客户端默认的 Content-Type: application/json，
+        # 让 httpx 自动设置 multipart/form-data; boundary=...
+        default_ct = self._client.headers.pop("Content-Type", None)
+        try:
+            response = await self._request(
+                "POST",
+                f"/api/v1/clients/{self._client_id}/screenshots/upload",
+                files=files,
+                data=data,
+            )
+        finally:
+            if default_ct is not None:
+                self._client.headers["Content-Type"] = default_ct
+        body = response.json()
+        if isinstance(body, dict) and "url" in body:
+            return body["url"]
+        return None
 
     # --- Group 8: Task Control ---
 
@@ -315,21 +392,20 @@ class ServerClient:
         params: dict[str, Any] = {"limit": limit}
         if status is not None:
             params["status"] = status
-        response = await self._request(
+        data = await self._request_json(
             "GET",
             f"/api/v1/clients/{self._client_id}/task-runs",
             params=params,
         )
-        return TaskRunListResponse.model_validate(response.json())
+        return TaskRunListResponse.model_validate(data)
 
     async def cancel_task_run(self, task_run_id: str) -> dict:
         """POST /api/v1/clients/{client_id}/task-runs/{task_run_id}/cancel"""
         self._require_registered()
-        response = await self._request(
+        return await self._request_json(
             "POST",
             f"/api/v1/clients/{self._client_id}/task-runs/{task_run_id}/cancel",
         )
-        return response.json()
 
     # --- SSE Stream ---
 
@@ -337,15 +413,31 @@ class ServerClient:
         """GET /api/v1/clients/{client_id}/events/stream (SSE)
 
         Returns an async generator yielding (event_type, data) tuples.
+
+        Note: SSE uses a long-lived connection with no read timeout. The
+        server sends a ``ping`` event every heartbeat interval (default
+        30s) to keep the connection alive. The default client timeout
+        must not be applied to the read phase, otherwise the stream
+        would be closed on the first idle 30s.
         """
         self._require_registered()
         if self._client is None:
             raise RuntimeError("Client is not started. Call start() first.")
 
+        # SSE needs a long-lived connection: disable read timeout, keep
+        # connect/write timeouts bounded so connection issues are still
+        # surfaced quickly.
+        sse_timeout = httpx.Timeout(
+            connect=self._timeout,
+            write=self._timeout,
+            read=None,  # never time out waiting for server-sent events
+            pool=self._timeout,
+        )
         async with self._client.stream(
             "GET",
             f"/api/v1/clients/{self._client_id}/events/stream",
             headers={"Accept": "text/event-stream"},
+            timeout=sse_timeout,
         ) as response:
             response.raise_for_status()
             event_type = "message"
