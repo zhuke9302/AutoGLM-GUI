@@ -295,12 +295,14 @@ export function ChatComponent() {
         setTempConfig(newTempConfig);
         lastCommittedTempConfigRef.current = newTempConfig;
 
-        if (useDefault) {
-          setShowConfig(true);
-        }
+        // 配置为空时不再自动弹出配置框（已屏蔽）
+        // if (useDefault) {
+        //   setShowConfig(true);
+        // }
       } catch (err) {
         console.error('Failed to load config:', err);
-        setShowConfig(true);
+        // 加载失败时不再自动弹出配置框（已屏蔽）
+        // setShowConfig(true);
       }
     };
 
