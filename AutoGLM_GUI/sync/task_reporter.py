@@ -95,8 +95,8 @@ class TaskReporter:
                 stop_reason=task_run.get("stop_reason"),
                 trace_id=task_run.get("trace_id"),
                 step_count=task_run.get("step_count", 0) or 0,
-                started_at=task_run.get("started_at", ""),
-                finished_at=task_run.get("finished_at", ""),
+                started_at=task_run.get("started_at") or "",
+                finished_at=task_run.get("finished_at") or "",
                 duration_ms=self._calc_duration_ms(task_run),
             )
 

@@ -376,7 +376,41 @@ class UnifiedConfigManager:
             explicit_keys=set(values.keys()),
         )
         self._effective_config = None  # 清除缓存
+
+        # 同时写入本地文件，方便调试查看
+        self._persist_server_config_to_file(values)
+
         logger.debug(f"Server config set: {list(values.keys())}")
+
+    def _persist_server_config_to_file(self, values: dict[str, Any]) -> None:
+        """将服务器下发的配置合并写入本地文件（仅更新提供的字段，保留其他字段不变）."""
+        try:
+            self._config_path.parent.mkdir(parents=True, exist_ok=True)
+
+            # 读取现有文件内容
+            existing: dict[str, Any] = {}
+            if self._config_path.exists():
+                try:
+                    with open(self._config_path, encoding="utf-8") as f:
+                        existing = json.load(f)
+                except (json.JSONDecodeError, OSError) as e:
+                    logger.warning(f"Could not read existing config for server merge: {e}")
+
+            # 合并：服务器下发的字段覆盖现有值
+            merged = {**existing, **values}
+
+            # 原子写入
+            temp_path = self._config_path.with_suffix(".tmp")
+            with open(temp_path, "w", encoding="utf-8") as f:
+                json.dump(merged, f, indent=2, ensure_ascii=False)
+            temp_path.replace(self._config_path)
+
+            # 重新加载文件配置以更新缓存
+            self.load_file_config(force_reload=True)
+
+            logger.info(f"Server config persisted to {self._config_path}")
+        except Exception as e:
+            logger.error(f"Failed to persist server config to file: {e}")
 
     def load_file_config(self, force_reload: bool = False) -> bool:
         """

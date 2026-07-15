@@ -11,6 +11,7 @@ export const zh = {
     create: '创建',
     close: '关闭',
     retry: '重试',
+    view: '查看',
   },
   footer: {
     starOnGitHub: '在 GitHub 上Star',

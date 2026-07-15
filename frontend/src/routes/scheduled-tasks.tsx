@@ -291,10 +291,7 @@ export function ScheduledTasksComponent() {
       {/* Header */}
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">{t.scheduledTasks.title}</h1>
-        <Button onClick={handleCreate}>
-          <Plus className="w-4 h-4 mr-2" />
-          {t.scheduledTasks.create}
-        </Button>
+        {/* 新建按钮已屏蔽 */}
       </div>
 
       {/* Content */}
@@ -323,6 +320,7 @@ export function ScheduledTasksComponent() {
                   <Switch
                     checked={task.enabled}
                     onCheckedChange={() => handleToggleEnabled(task)}
+                    disabled
                   />
                 </div>
               </CardHeader>
@@ -428,18 +426,7 @@ export function ScheduledTasksComponent() {
                       onClick={() => handleEdit(task)}
                     >
                       <Edit className="w-3 h-3 mr-1" />
-                      {t.common.edit}
-                    </Button>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => {
-                        setTaskToDelete(task.id);
-                        setDeleteDialogOpen(true);
-                      }}
-                    >
-                      <Trash2 className="w-3 h-3 mr-1" />
-                      {t.common.delete}
+                      {t.common.view}
                     </Button>
                   </div>
                 </div>
@@ -454,7 +441,7 @@ export function ScheduledTasksComponent() {
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle>
-              {editingTask ? t.scheduledTasks.edit : t.scheduledTasks.create}
+              {editingTask ? t.common.view : t.scheduledTasks.create}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -468,6 +455,7 @@ export function ScheduledTasksComponent() {
                   setFormData(prev => ({ ...prev, name: e.target.value }))
                 }
                 placeholder={t.scheduledTasks.taskNamePlaceholder}
+                readOnly
               />
             </div>
 
@@ -512,7 +500,7 @@ export function ScheduledTasksComponent() {
                   }))
                 }
               >
-                <SelectTrigger>
+                <SelectTrigger disabled>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -528,36 +516,6 @@ export function ScheduledTasksComponent() {
 
             <div className="space-y-2">
               <Label>{t.scheduledTasks.device}</Label>
-
-              {/* Selection mode tabs */}
-              <div className="flex gap-2 mb-2">
-                <Button
-                  type="button"
-                  variant={
-                    deviceSelectionMode === 'devices' ? 'default' : 'outline'
-                  }
-                  size="sm"
-                  onClick={() => {
-                    setDeviceSelectionMode('devices');
-                    setFormData(prev => ({ ...prev, device_group_id: null }));
-                  }}
-                >
-                  {t.scheduledTasks.selectDevice || '选择设备'}
-                </Button>
-                <Button
-                  type="button"
-                  variant={
-                    deviceSelectionMode === 'group' ? 'default' : 'outline'
-                  }
-                  size="sm"
-                  onClick={() => {
-                    setDeviceSelectionMode('group');
-                    setFormData(prev => ({ ...prev, device_serialnos: [] }));
-                  }}
-                >
-                  {t.scheduledTasks.selectGroup || '选择分组'}
-                </Button>
-              </div>
 
               {deviceSelectionMode === 'devices' ? (
                 // Device selection
@@ -590,6 +548,7 @@ export function ScheduledTasksComponent() {
                               }));
                             }}
                             className="rounded border-gray-300"
+                            disabled
                           />
                           <span className="text-sm">
                             {device.model || device.serial}
@@ -654,51 +613,16 @@ export function ScheduledTasksComponent() {
                 }
                 placeholder={t.scheduledTasks.cronPlaceholder}
                 className="font-mono"
+                readOnly
               />
               <p className="text-xs text-slate-500 dark:text-slate-400">
                 {t.scheduledTasks.cronHelp}
               </p>
             </div>
-
-            {/* Presets */}
-            <div className="space-y-2">
-              <Label>{t.scheduledTasks.presets}</Label>
-              <div className="flex flex-wrap gap-2">
-                {cronPresets.map(preset => (
-                  <Button
-                    key={preset.key}
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      setFormData(prev => ({
-                        ...prev,
-                        cron_expression: preset.cron,
-                      }))
-                    }
-                  >
-                    {
-                      t.scheduledTasks.preset[
-                        preset.key as keyof typeof t.scheduledTasks.preset
-                      ]
-                    }
-                  </Button>
-                ))}
-              </div>
-            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowDialog(false)}>
               {t.common.cancel}
-            </Button>
-            <Button onClick={handleSave} disabled={!isFormValid || saving}>
-              {saving ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  {t.common.loading}
-                </>
-              ) : (
-                t.common.save
-              )}
             </Button>
           </DialogFooter>
         </DialogContent>

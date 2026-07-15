@@ -11,6 +11,7 @@ export const en = {
     create: 'Create',
     close: 'Close',
     retry: 'Retry',
+    view: 'View',
   },
   footer: {
     starOnGitHub: 'Star on GitHub',

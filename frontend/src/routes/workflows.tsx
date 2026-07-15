@@ -307,10 +307,6 @@ export function WorkflowsComponent() {
     <div className="container mx-auto p-6 max-w-7xl">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">{t.workflows.title}</h1>
-        <Button onClick={handleCreate}>
-          <Plus className="w-4 h-4 mr-2" />
-          {t.workflows.createNew}
-        </Button>
       </div>
 
       {loading ? (
@@ -372,16 +368,9 @@ export function WorkflowsComponent() {
                     onClick={() => handleEdit(workflow)}
                   >
                     <Edit className="w-3 h-3 mr-1" />
-                    {t.common.edit}
+                    {t.common.view}
                   </Button>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => handleDelete(workflow.uuid)}
-                  >
-                    <Trash2 className="w-3 h-3 mr-1" />
-                    {t.common.delete}
-                  </Button>
+                  {/* 删除按钮已屏蔽 */}
                 </div>
               </CardContent>
             </Card>
@@ -412,6 +401,7 @@ export function WorkflowsComponent() {
                     setFormData(prev => ({ ...prev, name: e.target.value }))
                   }
                   placeholder={t.workflows.namePlaceholder}
+                  readOnly
                 />
               </div>
               <div className="space-y-3">
@@ -431,43 +421,6 @@ export function WorkflowsComponent() {
                             <p className="text-xs text-slate-700 dark:text-slate-200 font-semibold">
                               {t.workflows.stepLabel} {index + 1}
                             </p>
-                          </div>
-                          <div className="flex gap-1">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 rounded-full"
-                              disabled={index === 0}
-                              onClick={() => moveStep(index, -1)}
-                            >
-                              <ArrowUp className="w-3 h-3" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 rounded-full"
-                              disabled={index === formData.steps.length - 1}
-                              onClick={() => moveStep(index, 1)}
-                            >
-                              <ArrowDown className="w-3 h-3" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 rounded-full text-sky-600 hover:text-sky-700"
-                              onClick={() => insertStepAfter(index)}
-                              title={t.workflows.addStep}
-                            >
-                              <Plus className="w-3 h-3" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 rounded-full text-red-600 hover:text-red-700"
-                              onClick={() => removeStep(step.id)}
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </Button>
                           </div>
                         </div>
                         <div className="p-3 space-y-3">
@@ -498,6 +451,7 @@ export function WorkflowsComponent() {
                               }
                               rows={7}
                               className="resize-y min-h-[180px] !rounded-lg bg-white dark:bg-slate-950"
+                              readOnly
                             />
                           </div>
                         </div>
@@ -514,19 +468,6 @@ export function WorkflowsComponent() {
           <DialogFooter className="flex-shrink-0 border-t border-slate-200 dark:border-slate-800 px-6 py-4">
             <Button variant="outline" onClick={() => setShowDialog(false)}>
               {t.common.cancel}
-            </Button>
-            <Button
-              onClick={handleSave}
-              disabled={!formData.name.trim() || !hasValidStep || saving}
-            >
-              {saving ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  {t.common.loading}
-                </>
-              ) : (
-                t.common.save
-              )}
             </Button>
           </DialogFooter>
         </DialogContent>

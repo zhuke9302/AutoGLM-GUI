@@ -751,6 +751,7 @@ export function DeviceSidebar({
             <Plus className="h-4 w-4" />
             {t.deviceSidebar.addDevice}
           </Button>
+          {/* 管理分组按钮已屏蔽
           {onOpenGroupManager && (
             <Button
               variant="outline"
@@ -761,14 +762,8 @@ export function DeviceSidebar({
               {t.deviceSidebar.manageGroups || '管理分组'}
             </Button>
           )}
-          <Button
-            variant="outline"
-            onClick={onOpenConfig}
-            className="w-full justify-start gap-2 rounded-full border-slate-200 dark:border-slate-700"
-          >
-            <Settings className="h-4 w-4" />
-            {t.deviceSidebar.settings}
-          </Button>
+          */}
+          {/* 设置按钮已屏蔽 */}
         </div>
 
         {/* Manual WiFi Connect Dialog */}

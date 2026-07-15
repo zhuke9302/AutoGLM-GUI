@@ -156,9 +156,15 @@ class SchedulerManager:
     def _add_job(self, task: ScheduledTask) -> None:
         try:
             parts = task.cron_expression.split()
+            # 兼容 Quartz 6 段格式（秒 分 时 日 月 周）：丢弃秒位，转为 5 段
+            if len(parts) == 6:
+                parts = parts[1:]
             if len(parts) != 5:
                 logger.error(f"Invalid cron expression: {task.cron_expression}")
                 return
+
+            # 兼容 Quartz 的 "?"（不指定），APScheduler 用 "*" 表示任意
+            parts = [p.replace("?", "*") for p in parts]
 
             trigger = CronTrigger(
                 minute=parts[0],
