@@ -98,6 +98,7 @@ class TaskReporter:
                 started_at=task_run.get("started_at") or "",
                 finished_at=task_run.get("finished_at") or "",
                 duration_ms=self._calc_duration_ms(task_run),
+                business_status=task_run.get("business_status"),
             )
 
             await self._client.report_task_run(req)

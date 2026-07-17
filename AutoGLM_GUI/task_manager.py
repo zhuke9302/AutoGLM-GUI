@@ -418,6 +418,7 @@ class TaskManager:
         step_count: int,
         metrics_source: str,
         start_perf: float,
+        business_status: str | None = None,
     ) -> None:
         total_duration_ms = int((time.perf_counter() - start_perf) * 1000)
         try:
@@ -431,6 +432,7 @@ class TaskManager:
                     trace_id=trace_id,
                     mark_complete=False,
                     replay_source=metrics_source,
+                    business_status=business_status,
                 )
                 await self._record_trace_artifacts(
                     task_id=task_id,
@@ -492,6 +494,7 @@ class TaskManager:
         stop_reason = "error"
         step_count = 0
         abort_registered = False
+        business_status: str | None = None
 
         try:
             with trace_module.trace_context(trace_id):
@@ -552,10 +555,34 @@ class TaskManager:
                 else:
                     if user_image_attachments and image_attachment_setter is not None:
                         image_attachment_setter(user_image_attachments)
-                    event_type = ""
-                    event_data: dict[str, Any] = {}
 
-                    # 检查是否有待继续的 takeover
+                    # 解析 workflow steps；无 workflow_uuid 或 workflow 无 steps 时
+                    # 退化为单一 action 步骤（兼容旧版 chat 任务与无步骤 workflow）
+                    workflow_steps: list[dict[str, Any]] = []
+                    workflow_uuid = task.get("workflow_uuid")
+                    if workflow_uuid:
+                        try:
+                            from AutoGLM_GUI.workflow_manager import workflow_manager
+
+                            workflow = workflow_manager.get_workflow(str(workflow_uuid))
+                        except Exception:
+                            workflow = None
+                        raw_steps = workflow.get("steps") if workflow else None
+                        if raw_steps:
+                            workflow_steps = sorted(
+                                [dict(s) for s in raw_steps],
+                                key=lambda s: s.get("step_order", 0),
+                            )
+                    if not workflow_steps:
+                        workflow_steps = [
+                            {
+                                "step_order": 1,
+                                "step_type": "action",
+                                "step_name": str(task["input_text"]),
+                            }
+                        ]
+
+                    # 检查是否有待继续的 takeover；仅在第一步生效
                     is_continue = self._takeover_sessions.pop(session_id, False)
                     stream_kwargs: dict[str, Any] = {}
                     if is_continue:
@@ -564,69 +591,174 @@ class TaskManager:
                         sig = inspect.signature(agent.stream)
                         if "continue_with" in sig.parameters:
                             stream_kwargs["continue_with"] = task["input_text"]
-                    async for event in agent.stream(
-                        task["input_text"],
-                        **stream_kwargs,
-                    ):
-                        event_type = event["type"]
-                        event_data = dict(event.get("data", {}))
 
-                        # Skip thinking events – they are too granular for
-                        # persistent storage (one per streaming token).
-                        if event_type == "thinking":
-                            continue
+                    business_status = None
+                    has_assertion = False
+                    step_event_type = ""
+                    step_event_data: dict[str, Any] = {}
 
-                        if event_type == "step":
-                            step_count = max(step_count, int(event_data.get("step", 0)))
-                            timings = trace_module.get_step_timing_summary(
-                                step_count,
+                    for step in workflow_steps:
+                        step_type = step.get("step_type", "action")
+                        step_name = step.get("step_name", "")
+                        step_order = step.get("step_order", step_count + 1)
+
+                        if step_type == "assertion":
+                            has_assertion = True
+                            # 默认业务状态：出现 assertion 后初始化为 ok，
+                            # 失败时改为 abnormal
+                            if business_status is None:
+                                business_status = "ok"
+
+                        # 每步重置 agent 状态
+                        agent.reset()
+
+                        step_passed = True
+                        step_actual = ""
+                        step_event_type = ""
+                        step_event_data = {}
+
+                        async for event in agent.stream(
+                            step_name,
+                            **stream_kwargs,
+                        ):
+                            event_type = event["type"]
+                            event_data = dict(event.get("data", {}))
+
+                            # Skip thinking events – they are too granular for
+                            # persistent storage (one per streaming token).
+                            if event_type == "thinking":
+                                continue
+
+                            if event_type == "step":
+                                step_count = max(
+                                    step_count, int(event_data.get("step", 0))
+                                )
+                                timings = trace_module.get_step_timing_summary(
+                                    step_count,
+                                    trace_id=trace_id,
+                                )
+                                if timings is not None:
+                                    event_data = {**event_data, "timings": timings}
+                                # 标准化 step 事件 payload（Task 12.1）
+                                event_data = {
+                                    **event_data,
+                                    "step_type": step_type,
+                                    "step_order": step_order,
+                                    "step_name": step_name,
+                                }
+
+                            # done 事件携带 step_type/step_order/step_name，
+                            # assertion 步骤额外携带 passed/actual（Task 12.2）
+                            if event_type == "done":
+                                done_message = str(event_data.get("message", ""))
+                                if step_type == "assertion":
+                                    msg_upper = done_message.upper()
+                                    if "PASS" in msg_upper:
+                                        step_passed = True
+                                    elif "FAIL" in msg_upper:
+                                        step_passed = False
+                                        step_actual = done_message
+                                    else:
+                                        # 无法解析，保守按 FAIL 处理
+                                        step_passed = False
+                                        step_actual = (
+                                            f"Unable to parse assertion result: "
+                                            f"{done_message}"
+                                        )
+                                event_data = {
+                                    **event_data,
+                                    "step_type": step_type,
+                                    "step_order": step_order,
+                                    "step_name": step_name,
+                                    "passed": step_passed,
+                                    "actual": step_actual,
+                                }
+
+                            await self._append_task_event(
+                                task_id=task_id,
+                                event_type=event_type,
+                                payload=event_data,
+                                role="assistant",
                                 trace_id=trace_id,
+                                replay_source="classic_chat",
+                                task=task,
                             )
-                            if timings is not None:
-                                event_data = {**event_data, "timings": timings}
+                            step_event_type = event_type
+                            step_event_data = event_data
 
-                        await self._append_task_event(
-                            task_id=task_id,
-                            event_type=event_type,
-                            payload=event_data,
-                            role="assistant",
-                            trace_id=trace_id,
-                            replay_source="classic_chat",
-                            task=task,
-                        )
+                        # 仅第一步保留 continue_with，后续步骤不再传递
+                        stream_kwargs.pop("continue_with", None)
 
-                    if event_type == "takeover":
-                        final_message = str(event_data.get("message", ""))
-                        final_status = TaskStatus.SUCCEEDED.value
-                        stop_reason = "takeover"
-                        step_count = int(event_data.get("steps", step_count))
-                        self._takeover_sessions[session_id] = True
-                    elif event_type == "done":
-                        final_message = str(event_data.get("message", ""))
-                        final_status = (
-                            TaskStatus.SUCCEEDED.value
-                            if event_data.get("success", False)
-                            else TaskStatus.FAILED.value
-                        )
-                        stop_reason = str(
-                            event_data.get(
-                                "stop_reason",
-                                "completed"
-                                if event_data.get("success", False)
-                                else "error",
+                        # 解析步骤最终事件
+                        if step_event_type == "done":
+                            done_success = step_event_data.get("success", False)
+                            step_message = str(step_event_data.get("message", ""))
+                            # step_passed / step_actual 已在 done 事件
+                            # 处理时解析并写入事件 payload
+
+                            # action 步骤失败 → 任务 failed，停止循环
+                            if step_type == "action" and not done_success:
+                                final_message = step_message
+                                final_status = TaskStatus.FAILED.value
+                                stop_reason = "action_failed"
+                                business_status = None
+                                break
+
+                            # assertion 失败 → business_status=abnormal，
+                            # 立即停止循环（任务 status=succeeded）
+                            if step_type == "assertion" and not step_passed:
+                                business_status = "abnormal"
+                                final_message = (
+                                    f"Assertion failed at step {step_order}: "
+                                    f"{step_actual}"
+                                )
+                                final_status = TaskStatus.SUCCEEDED.value
+                                stop_reason = "assertion_failed"
+                                break
+
+                            # 正常完成此步骤
+                            final_message = step_message
+                            final_status = TaskStatus.SUCCEEDED.value
+                            stop_reason = "completed"
+                            step_count = int(
+                                step_event_data.get("steps", step_count)
                             )
-                        )
-                        step_count = int(event_data.get("steps", step_count))
-                    elif event_type == "error":
-                        final_message = str(event_data.get("message", "Task failed"))
-                        final_status = TaskStatus.FAILED.value
-                        stop_reason = str(event_data.get("stop_reason", "error"))
-                    elif event_type == "cancelled":
-                        final_message = str(
-                            event_data.get("message", "Task cancelled by user")
-                        )
-                        final_status = TaskStatus.CANCELLED.value
-                        stop_reason = str(event_data.get("stop_reason", "user_stopped"))
+
+                        elif step_event_type == "error":
+                            final_message = str(
+                                step_event_data.get("message", "Step failed")
+                            )
+                            final_status = TaskStatus.FAILED.value
+                            stop_reason = str(
+                                step_event_data.get("stop_reason", "error")
+                            )
+                            break
+
+                        elif step_event_type == "cancelled":
+                            final_message = str(
+                                step_event_data.get(
+                                    "message", "Task cancelled by user"
+                                )
+                            )
+                            final_status = TaskStatus.CANCELLED.value
+                            stop_reason = str(
+                                step_event_data.get("stop_reason", "user_stopped")
+                            )
+                            break
+
+                        elif step_event_type == "takeover":
+                            final_message = str(step_event_data.get("message", ""))
+                            final_status = TaskStatus.SUCCEEDED.value
+                            stop_reason = "takeover"
+                            step_count = int(
+                                step_event_data.get("steps", step_count)
+                            )
+                            self._takeover_sessions[session_id] = True
+                            break  # takeover 模式下结束循环
+
+                    # 所有步骤通过：若有 assertion 则 business_status=ok
+                    if has_assertion and business_status is None:
+                        business_status = "ok"
 
             if not final_message:
                 final_message = "Task finished without a final response"
@@ -657,6 +789,7 @@ class TaskManager:
                     step_count=step_count,
                     metrics_source="chat",
                     start_perf=start_perf,
+                    business_status=business_status,
                 )
                 return
             raise
@@ -699,6 +832,7 @@ class TaskManager:
             step_count=step_count,
             metrics_source="chat",
             start_perf=start_perf,
+            business_status=business_status,
         )
 
     async def _execute_layered_chat(self, task: TaskRecord) -> None:
@@ -861,6 +995,7 @@ class TaskManager:
         stop_reason = "error"
         step_count = 0
         abort_registered = False
+        business_status: str | None = None
 
         try:
             with trace_module.trace_context(trace_id):
@@ -892,7 +1027,6 @@ class TaskManager:
                     context=context,
                 )
                 abort_registered = True
-                agent.reset()
 
                 # Early cancel: if cancel was requested before streaming started
                 if task_id in self._cancel_requested:
@@ -900,76 +1034,169 @@ class TaskManager:
                     final_status = TaskStatus.CANCELLED.value
                     stop_reason = "user_stopped"
                 else:
-                    async for event in agent.stream(task["input_text"]):
-                        event_type = event["type"]
-                        event_data = dict(event.get("data", {}))
-                        # Skip thinking events – too granular for storage.
-                        if event_type == "thinking":
-                            continue
-                        if event_type == "step":
-                            step_count = max(
-                                step_count,
-                                int(event_data.get("step", 0)),
+                    # 解析 workflow steps；无 workflow_uuid 或 workflow 无 steps 时
+                    # 退化为单一 action 步骤（与 _execute_classic_chat 一致，
+                    # 兼容旧版 scheduled 任务与无步骤 workflow）
+                    workflow_steps: list[dict[str, Any]] = []
+                    workflow_uuid = task.get("workflow_uuid")
+                    if workflow_uuid:
+                        try:
+                            from AutoGLM_GUI.workflow_manager import workflow_manager
+
+                            workflow = workflow_manager.get_workflow(
+                                str(workflow_uuid)
                             )
-                            timings = trace_module.get_step_timing_summary(
-                                step_count,
-                                trace_id=trace_id,
+                        except Exception:
+                            workflow = None
+                        raw_steps = workflow.get("steps") if workflow else None
+                        if raw_steps:
+                            workflow_steps = sorted(
+                                [dict(s) for s in raw_steps],
+                                key=lambda s: s.get("step_order", 0),
                             )
-                            if timings is not None:
-                                event_data = {**event_data, "timings": timings}
+                    if not workflow_steps:
+                        workflow_steps = [
+                            {
+                                "step_order": 1,
+                                "step_type": "action",
+                                "step_name": str(task["input_text"]),
+                            }
+                        ]
+
+                    has_assertion = False
+
+                    for step in workflow_steps:
+                        step_type = step.get("step_type", "action")
+                        step_name = step.get("step_name", "")
+                        step_order = step.get("step_order", step_count + 1)
+
+                        if step_type == "assertion":
+                            has_assertion = True
+                            if business_status is None:
+                                business_status = "ok"
+
+                        # 每步重置 agent 状态
+                        agent.reset()
+
+                        step_passed = True
+                        step_actual = ""
+                        step_event_type = ""
+                        step_event_data: dict[str, Any] = {}
+
+                        async for event in agent.stream(step_name):
+                            event_type = event["type"]
+                            event_data = dict(event.get("data", {}))
+
+                            if event_type == "thinking":
+                                continue
+
+                            if event_type == "step":
+                                step_count = max(
+                                    step_count, int(event_data.get("step", 0))
+                                )
+                                timings = trace_module.get_step_timing_summary(
+                                    step_count,
+                                    trace_id=trace_id,
+                                )
+                                if timings is not None:
+                                    event_data = {**event_data, "timings": timings}
+                                event_data = {
+                                    **event_data,
+                                    "step_type": step_type,
+                                    "step_order": step_order,
+                                    "step_name": step_name,
+                                }
+
+                            if event_type == "done":
+                                done_message = str(event_data.get("message", ""))
+                                if step_type == "assertion":
+                                    msg_upper = done_message.upper()
+                                    if "PASS" in msg_upper:
+                                        step_passed = True
+                                    elif "FAIL" in msg_upper:
+                                        step_passed = False
+                                        step_actual = done_message
+                                    else:
+                                        step_passed = False
+                                        step_actual = (
+                                            f"Unable to parse assertion result: "
+                                            f"{done_message}"
+                                        )
+                                event_data = {
+                                    **event_data,
+                                    "step_type": step_type,
+                                    "step_order": step_order,
+                                    "step_name": step_name,
+                                    "passed": step_passed,
+                                    "actual": step_actual,
+                                }
+
                             await self._append_task_event(
                                 task_id=task_id,
-                                event_type="step",
+                                event_type=event_type,
                                 payload=event_data,
                                 role="assistant",
                                 trace_id=trace_id,
                                 replay_source="scheduled",
                                 task=task,
                             )
-                        elif event_type == "done":
-                            final_message = str(
-                                event_data.get("message", "Task completed")
-                            )
-                            final_status = (
-                                TaskStatus.SUCCEEDED.value
-                                if event_data.get("success", False)
-                                else TaskStatus.FAILED.value
-                            )
-                            stop_reason = str(
-                                event_data.get(
-                                    "stop_reason",
-                                    "completed"
-                                    if event_data.get("success", False)
-                                    else "error",
+                            step_event_type = event_type
+                            step_event_data = event_data
+
+                        # 解析步骤最终事件
+                        if step_event_type == "done":
+                            done_success = step_event_data.get("success", False)
+                            step_message = str(step_event_data.get("message", ""))
+
+                            if step_type == "action" and not done_success:
+                                final_message = step_message
+                                final_status = TaskStatus.FAILED.value
+                                stop_reason = "action_failed"
+                                business_status = None
+                                break
+
+                            if step_type == "assertion" and not step_passed:
+                                business_status = "abnormal"
+                                final_message = (
+                                    f"Assertion failed at step {step_order}: "
+                                    f"{step_actual}"
                                 )
+                                final_status = TaskStatus.SUCCEEDED.value
+                                stop_reason = "assertion_failed"
+                                break
+
+                            final_message = step_message
+                            final_status = TaskStatus.SUCCEEDED.value
+                            stop_reason = "completed"
+                            step_count = int(
+                                step_event_data.get("steps", step_count)
                             )
-                            step_count = int(event_data.get("steps", step_count))
-                        elif event_type == "error":
+
+                        elif step_event_type == "error":
                             final_message = str(
-                                event_data.get("message", "Task failed")
+                                step_event_data.get("message", "Step failed")
                             )
                             final_status = TaskStatus.FAILED.value
-                            stop_reason = str(event_data.get("stop_reason", "error"))
-                            await self._append_task_event(
-                                task_id=task_id,
-                                event_type="error",
-                                payload={
-                                    "message": final_message,
-                                    "stop_reason": stop_reason,
-                                },
-                                role="assistant",
-                                trace_id=trace_id,
-                                replay_source="scheduled",
-                                task=task,
+                            stop_reason = str(
+                                step_event_data.get("stop_reason", "error")
                             )
-                        elif event_type == "cancelled":
+                            break
+
+                        elif step_event_type == "cancelled":
                             final_message = str(
-                                event_data.get("message", "Task cancelled by user")
+                                step_event_data.get(
+                                    "message", "Task cancelled by user"
+                                )
                             )
                             final_status = TaskStatus.CANCELLED.value
                             stop_reason = str(
-                                event_data.get("stop_reason", "user_stopped")
+                                step_event_data.get("stop_reason", "user_stopped")
                             )
+                            break
+
+                    # 所有步骤通过：若有 assertion 则 business_status=ok
+                    if has_assertion and business_status is None:
+                        business_status = "ok"
 
                 if not final_message:
                     final_message = "Task finished without a final response"
@@ -1031,6 +1258,7 @@ class TaskManager:
             step_count=step_count,
             metrics_source="scheduled",
             start_perf=start_perf,
+            business_status=business_status,
         )
 
     async def _finalize_task(
@@ -1044,6 +1272,7 @@ class TaskManager:
         trace_id: str | None = None,
         mark_complete: bool = True,
         replay_source: str = "task_finalize",
+        business_status: str | None = None,
     ) -> None:
         normalized_stop_reason = stop_reason
         if normalized_stop_reason is None:
@@ -1098,6 +1327,7 @@ class TaskManager:
             stop_reason=normalized_stop_reason,
             step_count=step_count,
             trace_id=trace_id,
+            business_status=business_status,
         )
         if trace_id:
             status_events = await asyncio.to_thread(

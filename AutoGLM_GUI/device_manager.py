@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import threading
 import time
 from collections import defaultdict
@@ -1112,13 +1113,17 @@ class DeviceManager:
 
         return ADBDevice(local_device_id)
 
-    def get_async_device_protocol(
+    async def get_async_device_protocol(
         self, device_id: ConnectionDeviceID
     ) -> AsyncDeviceProtocol:
         """
         根据 device_id 获取 AsyncDeviceProtocol 实例（统一入口）.
 
         异步 agent 统一使用此入口，避免在事件循环中调用同步 DeviceProtocol。
+
+        Note: 此方法为 async，因为 ADB Keyboard 检查（同步 subprocess 调用）
+        需在独立线程中执行，避免在运行中的事件循环里调用 ``asyncio.run()``
+        导致 ``RuntimeError`` 与协程未 await 警告。
         """
         with self._devices_lock:
             managed = self.get_device_by_device_id(device_id)
@@ -1138,7 +1143,11 @@ class DeviceManager:
             local_device_id = managed.primary_device_id
             local_managed = managed
 
-        self._ensure_adb_keyboard_once(local_device_id, local_managed)
+        # 在独立线程中执行同步的 ADB Keyboard 检查，避免在运行中的事件循环里
+        # 调用 asyncio.run()（keyboard_installer 内部使用 asyncio.run）。
+        await asyncio.to_thread(
+            self._ensure_adb_keyboard_once, local_device_id, local_managed
+        )
 
         from AutoGLM_GUI.devices.adb_device import AsyncADBDevice
 

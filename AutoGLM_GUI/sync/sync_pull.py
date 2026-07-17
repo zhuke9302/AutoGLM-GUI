@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from AutoGLM_GUI.sync.client import ServerClient, ServerUnavailableError
 from AutoGLM_GUI.sync.schemas import (
@@ -12,7 +12,7 @@ from AutoGLM_GUI.sync.schemas import (
 
 if TYPE_CHECKING:
     from AutoGLM_GUI.scheduler_manager import SchedulerManager
-    from AutoGLM_GUI.workflow_manager import WorkflowManager
+    from AutoGLM_GUI.workflow_manager import WorkflowManager, WorkflowRecord
 
 from AutoGLM_GUI.config_manager import UnifiedConfigManager
 from AutoGLM_GUI.models.scheduled_task import ScheduledTask
@@ -171,18 +171,41 @@ class SyncPull:
     def _merge_workflow(self, item: WorkflowSyncItem) -> None:
         """Merge a single workflow from server into local WorkflowManager."""
         try:
+            # Convert server steps (pydantic models) into plain dicts for storage.
+            # When the server omits steps (older responses), Field(default_factory=list)
+            # ensures item.steps is an empty list, so this never raises ValidationError.
+            steps_data = [step.model_dump() for step in item.steps]
+
             existing = self._workflows.get_workflow(item.uuid)
+            # WorkflowRecord is a TypedDict without the `steps` key yet (Task 8
+            # will extend it). TypedDict instances are plain dicts at runtime,
+            # so writing `steps` is safe; we cast to `dict[str, object]` to keep
+            # the static type checker happy without modifying workflow_manager.
             if existing:
-                self._workflows.update_workflow(
-                    item.uuid, name=item.name, text=item.text
-                )
+                # WorkflowManager.update_workflow() does not understand the
+                # steps field, so we persist name/text/steps directly here to
+                # keep a single atomic save.
+                workflows = self._workflows._load_workflows()  # noqa: SLF001
+                for wf in workflows:
+                    if wf["uuid"] == item.uuid:
+                        wf_dict = cast("dict[str, object]", wf)
+                        wf_dict["name"] = item.name
+                        wf_dict["text"] = item.text
+                        wf_dict["steps"] = steps_data
+                        break
+                self._workflows._save_workflows(workflows)  # noqa: SLF001
                 logger.debug("Updated workflow %s", item.uuid)
             else:
                 # WorkflowManager.create_workflow() auto-generates a UUID, so
                 # we directly construct the record and persist it.
                 workflows = self._workflows._load_workflows()  # noqa: SLF001
-                new_workflow = {"uuid": item.uuid, "name": item.name, "text": item.text}
-                workflows.append(new_workflow)
+                new_workflow: dict[str, object] = {
+                    "uuid": item.uuid,
+                    "name": item.name,
+                    "text": item.text,
+                    "steps": steps_data,
+                }
+                workflows.append(cast("WorkflowRecord", new_workflow))
                 self._workflows._save_workflows(workflows)  # noqa: SLF001
                 logger.debug("Created workflow %s from server", item.uuid)
         except Exception as e:

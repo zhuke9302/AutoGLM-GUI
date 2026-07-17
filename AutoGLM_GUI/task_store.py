@@ -107,6 +107,7 @@ class TaskStore:
                 final_message TEXT NULL,
                 error_message TEXT NULL,
                 stop_reason TEXT NULL,
+                business_status TEXT NULL,
                 trace_id TEXT NULL,
                 step_count INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL,
@@ -149,6 +150,10 @@ class TaskStore:
         }
         if "stop_reason" not in columns:
             self._conn.execute("ALTER TABLE task_runs ADD COLUMN stop_reason TEXT NULL")
+        if "business_status" not in columns:
+            self._conn.execute(
+                "ALTER TABLE task_runs ADD COLUMN business_status TEXT NULL"
+            )
         if "trace_id" not in columns:
             self._conn.execute("ALTER TABLE task_runs ADD COLUMN trace_id TEXT NULL")
         self._conn.commit()
@@ -374,6 +379,7 @@ class TaskStore:
         status: str = TaskStatus.QUEUED.value,
         task_id: str | None = None,
         trace_id: str | None = None,
+        business_status: str | None = None,
     ) -> TaskRecord:
         self._ensure_ready()
         now = _now_iso()
@@ -393,6 +399,7 @@ class TaskStore:
                 "device_serial": device_serial,
                 "status": status,
                 "trace_id": task_trace_id,
+                "business_status": business_status,
             },
         ):
             with self._lock:
@@ -402,9 +409,9 @@ class TaskStore:
                     INSERT INTO task_runs (
                         id, source, executor_key, session_id, scheduled_task_id, workflow_uuid,
                         schedule_fire_id, device_id, device_serial, status, input_text,
-                        final_message, error_message, stop_reason, trace_id, step_count,
-                        created_at, started_at, finished_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, 0, ?, NULL, NULL)
+                        final_message, error_message, stop_reason, business_status, trace_id,
+                        step_count, created_at, started_at, finished_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?, 0, ?, NULL, NULL)
                     """,
                     (
                         record_id,
@@ -418,6 +425,7 @@ class TaskStore:
                         device_serial,
                         status,
                         input_text,
+                        business_status,
                         task_trace_id,
                         now,
                     ),
@@ -607,6 +615,7 @@ class TaskStore:
         stop_reason: str | None = None,
         step_count: int = 0,
         trace_id: str | None = None,
+        business_status: str | None = None,
     ) -> TaskRecord | None:
         self._ensure_ready()
         task_trace_id = trace_id or current_trace_id()
@@ -618,6 +627,7 @@ class TaskStore:
                 "stop_reason": stop_reason,
                 "step_count": step_count,
                 "trace_id": task_trace_id,
+                "business_status": business_status,
             },
         ):
             with self._lock:
@@ -626,6 +636,7 @@ class TaskStore:
                     """
                     UPDATE task_runs
                     SET status = ?, final_message = ?, error_message = ?, stop_reason = ?,
+                        business_status = COALESCE(?, business_status),
                         step_count = ?, trace_id = COALESCE(?, trace_id), finished_at = ?
                     WHERE id = ?
                     """,
@@ -634,6 +645,7 @@ class TaskStore:
                         final_message,
                         error_message,
                         stop_reason,
+                        business_status,
                         step_count,
                         task_trace_id,
                         _now_iso(),
@@ -645,6 +657,29 @@ class TaskStore:
                     event_type="status",
                     role="system",
                     payload={"status": status},
+                )
+                self._conn.commit()
+                return self.get_task(task_id)
+
+    def update_task_business_status(
+        self, task_id: str, business_status: str | None
+    ) -> TaskRecord | None:
+        """Update the business_status column of a task run.
+
+        Used to record assertion outcomes (e.g. ``ok`` / ``abnormal``) independently
+        of the terminal status update, so the value can be reported before the task
+        finishes or overwritten mid-run if needed.
+        """
+        self._ensure_ready()
+        with trace_span(
+            "task_store.task.set_business_status",
+            attrs={"task_id": task_id, "business_status": business_status},
+        ):
+            with self._lock:
+                assert self._conn is not None
+                self._conn.execute(
+                    "UPDATE task_runs SET business_status = ? WHERE id = ?",
+                    (business_status, task_id),
                 )
                 self._conn.commit()
                 return self.get_task(task_id)

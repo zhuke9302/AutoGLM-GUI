@@ -1,13 +1,8 @@
 {
-  "name": "autoglm-gui",
-  "version": "1.5.19",
-  "description": "AutoGLM GUI - AI-powered Android automation desktop app",
+  "name": "智能巡检",
+  "version": "26.7.16",
+  "description": "AI-powered Android automation desktop app",
   "main": "main.js",
-  "homepage": "https://github.com/suyiiyii/AutoGLM-GUI",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/suyiiyii/AutoGLM-GUI.git"
-  },
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
@@ -24,10 +19,6 @@
     "automation",
     "electron"
   ],
-  "author": {
-    "name": "suyiiyii",
-    "email": "suyiiyii@gmail.com"
-  },
   "license": "MIT",
   "devDependencies": {
     "electron": "^39.8.10",

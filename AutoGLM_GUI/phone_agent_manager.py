@@ -255,7 +255,7 @@ class PhoneAgentManager:
                     "agent_manager.get_device_protocol",
                     attrs={"device_id": actual_device_id},
                 ):
-                    device = device_manager.get_async_device_protocol(actual_device_id)
+                    device = await device_manager.get_async_device_protocol(actual_device_id)
             except ValueError:
                 device_manager.force_refresh()
                 with trace_span(
@@ -265,7 +265,7 @@ class PhoneAgentManager:
                         "after_refresh": True,
                     },
                 ):
-                    device = device_manager.get_async_device_protocol(actual_device_id)
+                    device = await device_manager.get_async_device_protocol(actual_device_id)
 
             with trace_span(
                 "agent_manager.create_agent",

@@ -3,7 +3,7 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic.alias_generators import to_camel
 
 
@@ -120,10 +120,27 @@ class ExecutionReportResponse(SyncBaseModel):
 # ---------------------------------------------------------------------------
 
 
+class WorkflowStepSyncItem(SyncBaseModel):
+    step_order: int
+    # 旧 workflow 步骤可能未设置 step_type（数据库字段为 NULL），
+    # 默认按 action 处理，避免反序列化失败导致整个 workflow 同步中断。
+    step_type: Literal["action", "assertion"] = "action"
+    step_name: str
+
+    @field_validator("step_type", mode="before")
+    @classmethod
+    def _normalize_step_type(cls, v):
+        # 后端对历史数据可能返回 null/空字符串，统一降级为 action
+        if v is None or v == "":
+            return "action"
+        return v
+
+
 class WorkflowSyncItem(SyncBaseModel):
     uuid: str
     name: str
     text: str
+    steps: list[WorkflowStepSyncItem] = Field(default_factory=list)
     updated_at: str
 
 
@@ -169,6 +186,7 @@ class TaskRunReportRequest(SyncBaseModel):
     started_at: str
     finished_at: str
     duration_ms: int
+    business_status: Literal["ok", "abnormal"] | None = None
 
 
 class TaskRunReportResponse(SyncBaseModel):

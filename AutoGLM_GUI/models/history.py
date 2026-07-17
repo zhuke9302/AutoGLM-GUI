@@ -21,6 +21,20 @@ class MessageRecord:
     action: dict[str, Any] | None = None
     step: int | None = None
 
+    # 步骤事件标准化字段（scheduler_manager 按步骤循环执行时填入）
+    # step_type: "action" 或 "assertion"
+    # step_order: 步骤序号（1-based）
+    # step_name: 步骤名称/指令文本
+    # step_passed: assertion 步骤是否通过；action 步骤恒为 True
+    # step_expected: assertion 期望值（可选）
+    # step_actual: assertion 实际观测值（失败时填入）
+    step_type: str | None = None
+    step_order: int | None = None
+    step_name: str | None = None
+    step_passed: bool | None = None
+    step_expected: str | None = None
+    step_actual: str | None = None
+
     def to_dict(self) -> dict[str, Any]:
         """转换为可序列化的字典."""
         return {
@@ -30,6 +44,12 @@ class MessageRecord:
             "thinking": self.thinking,
             "action": self.action,
             "step": self.step,
+            "step_type": self.step_type,
+            "step_order": self.step_order,
+            "step_name": self.step_name,
+            "step_passed": self.step_passed,
+            "step_expected": self.step_expected,
+            "step_actual": self.step_actual,
         }
 
     @classmethod
@@ -44,6 +64,12 @@ class MessageRecord:
             thinking=data.get("thinking"),
             action=data.get("action"),
             step=data.get("step"),
+            step_type=data.get("step_type"),
+            step_order=data.get("step_order"),
+            step_name=data.get("step_name"),
+            step_passed=data.get("step_passed"),
+            step_expected=data.get("step_expected"),
+            step_actual=data.get("step_actual"),
         )
 
 

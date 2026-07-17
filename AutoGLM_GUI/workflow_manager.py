@@ -15,15 +15,22 @@ import uuid as uuid_lib
 from pathlib import Path
 from typing import Self
 
-from typing_extensions import TypedDict
+from typing_extensions import NotRequired, TypedDict
 
 from AutoGLM_GUI.logger import logger
+
+
+class WorkflowStepItem(TypedDict):
+    step_order: int
+    step_type: str  # "action" 或 "assertion"
+    step_name: str
 
 
 class WorkflowRecord(TypedDict):
     uuid: str
     name: str
     text: str
+    steps: NotRequired[list[WorkflowStepItem]]
 
 
 class WorkflowFile(TypedDict):
@@ -70,12 +77,18 @@ class WorkflowManager:
         workflows = self._load_workflows()
         return next((wf for wf in workflows if wf["uuid"] == uuid), None)
 
-    def create_workflow(self, name: str, text: str) -> WorkflowRecord:
+    def create_workflow(
+        self,
+        name: str,
+        text: str,
+        steps: list[WorkflowStepItem] | None = None,
+    ) -> WorkflowRecord:
         """创建新 workflow.
 
         Args:
             name: Workflow 名称
             text: Workflow 任务内容
+            steps: Workflow 步骤列表，None 时表示不写入该字段（向后兼容）
 
         Returns:
             dict: 新创建的 workflow
@@ -86,18 +99,27 @@ class WorkflowManager:
             "name": name,
             "text": text,
         }
+        if steps is not None:
+            new_workflow["steps"] = steps
         workflows.append(new_workflow)
         self._save_workflows(workflows)
         logger.info(f"Created workflow: {name} (uuid={new_workflow['uuid']})")
         return new_workflow
 
-    def update_workflow(self, uuid: str, name: str, text: str) -> WorkflowRecord | None:
+    def update_workflow(
+        self,
+        uuid: str,
+        name: str,
+        text: str,
+        steps: list[WorkflowStepItem] | None = None,
+    ) -> WorkflowRecord | None:
         """更新 workflow.
 
         Args:
             uuid: Workflow UUID
             name: 新名称
             text: 新任务内容
+            steps: Workflow 步骤列表，None 时表示不更新该字段（向后兼容）
 
         Returns:
             dict | None: 更新后的 workflow，如果不存在则返回 None
@@ -107,6 +129,8 @@ class WorkflowManager:
             if wf["uuid"] == uuid:
                 wf["name"] = name
                 wf["text"] = text
+                if steps is not None:
+                    wf["steps"] = steps
                 self._save_workflows(workflows)
                 logger.info(f"Updated workflow: {name} (uuid={uuid})")
                 return wf

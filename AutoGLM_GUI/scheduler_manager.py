@@ -26,6 +26,12 @@ class DeviceExecutionResult:
     success: bool
     message: str
     device_model: str = ""
+    # 业务状态：ok / abnormal / None（未涉及 assertion）
+    business_status: str | None = None
+    # 停止原因：action_failed / assertion_failed / None（正常完成）
+    stop_reason: str | None = None
+    # 执行步骤数
+    step_count: int = 0
 
 
 class SchedulerManager:
@@ -233,50 +239,155 @@ class SchedulerManager:
                 device_model=device.model or serialno,
             )
 
+        # SubTask 11.1: 解析 workflow steps；无 steps 时退化为单一 action 步骤
+        workflow_steps_raw = workflow.get("steps") or []
+        if not workflow_steps_raw:
+            # 旧版兼容：仅 text 字段，退化为单一 action 步骤
+            workflow_steps = [
+                {
+                    "step_order": 1,
+                    "step_type": "action",
+                    "step_name": workflow["text"],
+                }
+            ]
+        else:
+            # 按 step_order 升序排序
+            workflow_steps = sorted(
+                workflow_steps_raw, key=lambda s: s.get("step_order", 0)
+            )
+
+        workflow_text = workflow.get("text", "") or (
+            workflow_steps[0].get("step_name", "") if workflow_steps else ""
+        )
+
         start_time = datetime.now(tz=timezone.utc)
+        # 初始 user 消息携带完整 workflow 文本，保持向后兼容
         messages: list[MessageRecord] = [
             MessageRecord(
                 role="user",
-                content=workflow["text"],
+                content=workflow_text,
                 timestamp=start_time,
             )
         ]
 
+        # SubTask 11.2 - 11.6: 按步骤循环执行
+        business_status: str | None = None
+        stop_reason: str | None = None
+        step_count = 0
         result_message = ""
         task_success = False
+        # 是否出现过 assertion 步骤；若有则业务状态需明确（ok/abnormal），否则为 None
+        has_assertion = False
 
         try:
             agent: Any = await manager.get_agent_async(device.primary_device_id)
-            agent.reset()
 
-            async for event in agent.stream(workflow["text"]):
-                step_data: dict[str, Any] = event.get("data", {})
-                if event["type"] == "step":
-                    messages.append(
-                        MessageRecord(
-                            role="assistant",
-                            content="",
-                            timestamp=datetime.now(tz=timezone.utc),
-                            thinking=step_data.get("thinking", ""),
-                            action=step_data.get("action", {}),
-                            step=step_data.get("step", 0),
+            for step in workflow_steps:
+                step_type = step.get("step_type", "action")
+                step_name = step.get("step_name", "")
+                step_order = step.get("step_order", step_count + 1)
+
+                if step_type == "assertion":
+                    has_assertion = True
+                    # 默认业务状态：在出现 assertion 后初始化为 ok，失败时改为 abnormal
+                    if business_status is None:
+                        business_status = "ok"
+
+                # 每步独立重置 agent 状态
+                agent.reset()
+
+                step_passed = True
+                step_actual = ""
+                step_result_message = ""
+
+                async for event in agent.stream(step_name):
+                    event_type = event["type"]
+                    step_data: dict[str, Any] = event.get("data", {}) or {}
+
+                    if event_type == "step":
+                        # SubTask 12.1 & 12.2: step 事件 payload 标准化字段
+                        messages.append(
+                            MessageRecord(
+                                role="assistant",
+                                content="",
+                                timestamp=datetime.now(tz=timezone.utc),
+                                thinking=step_data.get("thinking", ""),
+                                action=step_data.get("action", {}),
+                                step=step_data.get("step", step_count),
+                                step_type=step_type,
+                                step_order=step_order,
+                                step_name=step_name,
+                                step_passed=None,  # 中间步骤尚未结束，暂不判定
+                            )
                         )
-                    )
-                elif event["type"] == "done":
-                    result_message = step_data.get("message", "Task completed")
-                    task_success = step_data.get("success", False)
-                    break
-                elif event["type"] == "error":
-                    result_message = step_data.get("message", "Task failed")
-                    task_success = False
+                    elif event_type == "done":
+                        step_result_message = step_data.get("message", "Step completed")
+                        task_success = step_data.get("success", False)
+
+                        # assertion 步骤需要解析 final_message 判定 PASS/FAIL
+                        if step_type == "assertion":
+                            msg_upper = step_result_message.upper()
+                            if "PASS" in msg_upper:
+                                step_passed = True
+                            elif "FAIL" in msg_upper:
+                                step_passed = False
+                                step_actual = step_result_message
+                            else:
+                                # 无法解析，保守按 FAIL 处理
+                                step_passed = False
+                                step_actual = (
+                                    f"Unable to parse assertion result: "
+                                    f"{step_result_message}"
+                                )
+                            # 更新最后一条 step 消息的判定结果
+                            if messages and messages[-1].role == "assistant":
+                                messages[-1].step_passed = step_passed
+                                messages[-1].step_actual = step_actual
+                        else:
+                            # action 步骤通过即视为 passed
+                            if messages and messages[-1].role == "assistant":
+                                messages[-1].step_passed = task_success
+                        break
+                    elif event_type == "error":
+                        step_result_message = step_data.get("message", "Step failed")
+                        task_success = False
+                        if messages and messages[-1].role == "assistant":
+                            messages[-1].step_passed = False
+                            messages[-1].step_actual = step_result_message
+                        break
+
+                step_count += 1
+                result_message = step_result_message or result_message
+
+                # SubTask 11.3: action 步骤失败 → 任务 failed，停止循环
+                if step_type == "action" and not task_success:
+                    stop_reason = "action_failed"
+                    business_status = None  # action 失败不涉及业务断言
                     break
 
-            steps = agent.step_count
+                # SubTask 11.4 & 11.5: assertion 步骤失败 → 立即中断，business_status=abnormal
+                if step_type == "assertion" and not step_passed:
+                    business_status = "abnormal"
+                    stop_reason = "assertion_failed"
+                    result_message = (
+                        f"Assertion failed at step {step_order}: {step_actual}"
+                    )
+                    break
+
+            # SubTask 11.6: 所有步骤通过 → business_status=ok（仅当出现过 assertion 时）
+            if stop_reason is None:
+                task_success = True
+                if has_assertion:
+                    business_status = "ok"
+                if not result_message:
+                    result_message = "All steps completed successfully"
+
+            steps = step_count
             end_time = datetime.now(tz=timezone.utc)
             device_model = device.model or serialno
 
             record = ConversationRecord(
-                task_text=workflow["text"],
+                task_text=workflow_text,
                 final_message=result_message,
                 success=task_success,
                 steps=steps,
@@ -295,6 +406,9 @@ class SchedulerManager:
                 success=task_success,
                 message=result_message,
                 device_model=device_model,
+                business_status=business_status,
+                stop_reason=stop_reason,
+                step_count=steps,
             )
 
         except Exception as e:
@@ -303,10 +417,10 @@ class SchedulerManager:
             device_model = device.model or serialno
 
             record = ConversationRecord(
-                task_text=workflow["text"],
+                task_text=workflow_text,
                 final_message=error_msg,
                 success=False,
-                steps=0,
+                steps=step_count,
                 start_time=start_time,
                 end_time=end_time,
                 duration_ms=int((end_time - start_time).total_seconds() * 1000),
@@ -322,6 +436,9 @@ class SchedulerManager:
                 success=False,
                 message=error_msg,
                 device_model=device_model,
+                business_status=business_status,
+                stop_reason=stop_reason,
+                step_count=step_count,
             )
 
         finally:
