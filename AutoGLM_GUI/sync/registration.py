@@ -154,6 +154,7 @@ class SyncRegistration:
 
     @staticmethod
     def _now_iso() -> str:
-        from datetime import datetime, timezone
+        from datetime import datetime, timedelta, timezone
 
-        return datetime.now(timezone.utc).isoformat()
+        _CST = timezone(timedelta(hours=8))
+        return datetime.now(_CST).isoformat()

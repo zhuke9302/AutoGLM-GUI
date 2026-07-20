@@ -41,6 +41,8 @@ class PushChannel:
         self._stream_task: asyncio.Task | None = None
         self._connected = False
         self._reconnect_delay: float = 1.0
+        # fire_id 去重集合，防止同一个 TASK_DISPATCH 事件被重复执行
+        self._processed_fire_ids: set[str] = set()
 
     @property
     def is_connected(self) -> bool:
@@ -156,6 +158,21 @@ class PushChannel:
     async def _on_task_dispatch(self, data: dict) -> None:
         """Handle task.dispatch — execute an immediate inspection task."""
         evt = SSETaskDispatch.model_validate(data)
+
+        # fire_id 去重：同一个 TASK_DISPATCH 事件只执行一次
+        if evt.fire_id in self._processed_fire_ids:
+            logger.info(
+                "SSE: task.dispatch duplicate fire_id=%s, skipping",
+                evt.fire_id,
+            )
+            return
+        self._processed_fire_ids.add(evt.fire_id)
+        # 防止集合无限增长，保留最近 500 条
+        if len(self._processed_fire_ids) > 500:
+            self._processed_fire_ids = set(
+                list(self._processed_fire_ids)[-500:]
+            )
+
         logger.info(
             "SSE: task.dispatch scheduled_task_id=%s fire_id=%s devices=%s",
             evt.scheduled_task_id,

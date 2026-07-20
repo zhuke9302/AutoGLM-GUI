@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
 from AutoGLM_GUI.sync.client import ServerClient, ServerUnavailableError
@@ -96,7 +96,7 @@ class DeviceReporter:
                 return None
 
             req = DeviceReportRequest(
-                timestamp=datetime.now(timezone.utc).isoformat(),
+                timestamp=datetime.now(timezone(timedelta(hours=8))).isoformat(),
                 devices=items,
             )
             resp = await self._client.report_devices(req)

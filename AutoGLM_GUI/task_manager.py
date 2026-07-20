@@ -24,6 +24,65 @@ import AutoGLM_GUI.trace as trace_module
 TaskExecutor = Callable[[TaskRecord], Awaitable[None]]
 TaskImageAttachment = dict[str, Any]
 
+# 断言步骤 prompt 约束：强制模型在回复末尾输出 PASS 或 FAIL
+_ASSERTION_SUFFIX = (
+    "\n\n【重要】你必须在回复的最后一行，单独输出一行，内容仅为以下之一："
+    "\n- 如果断言成立，输出：RESULT: PASS"
+    "\n- 如果断言不成立，输出：RESULT: FAIL"
+    "\n不要遗漏这行结果标识。严格按照以上格式输出。"
+)
+
+# 断言判断 prompt 模板
+_ASSERTION_JUDGE_PROMPT = (
+    "你是一个断言判断器。请根据以下信息判断断言是否成立。\n\n"
+    "【断言内容】{assertion}\n"
+    "【执行结果】{message}\n\n"
+    "请只回复一个词：PASS（断言成立）或 FAIL（断言不成立）。"
+)
+
+
+async def _judge_assertion_with_decision_model(
+    assertion_name: str, agent_message: str
+) -> bool | None:
+    """用决策模型判断断言是否成立。
+
+    Returns:
+        True: 断言成立
+        False: 断言不成立
+        None: 无法判断（无决策模型或调用失败）
+    """
+    from AutoGLM_GUI.config_manager import config_manager
+
+    config = config_manager.get_effective_config()
+    if not config.decision_base_url or not config.decision_model_name:
+        return None
+
+    try:
+        from openai import AsyncOpenAI
+
+        client = AsyncOpenAI(
+            base_url=config.decision_base_url,
+            api_key=config.decision_api_key or "EMPTY",
+            timeout=30,
+        )
+        prompt = _ASSERTION_JUDGE_PROMPT.format(
+            assertion=assertion_name, message=agent_message
+        )
+        response = await client.chat.completions.create(
+            model=config.decision_model_name,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=10,
+            temperature=0,
+        )
+        reply = (response.choices[0].message.content or "").strip().upper()
+        if "PASS" in reply and "FAIL" not in reply:
+            return True
+        if "FAIL" in reply and "PASS" not in reply:
+            return False
+        return None
+    except Exception:
+        return None
+
 
 class TaskManager:
     """Queue-backed task manager with per-device workers."""
@@ -608,6 +667,8 @@ class TaskManager:
                             # 失败时改为 abnormal
                             if business_status is None:
                                 business_status = "ok"
+                            # 追加 prompt 约束，强制模型返回 PASS/FAIL 标识
+                            step_name = "断言" + step_name + _ASSERTION_SUFFIX
 
                         # 每步重置 agent 状态
                         agent.reset()
@@ -659,12 +720,22 @@ class TaskManager:
                                         step_passed = False
                                         step_actual = done_message
                                     else:
-                                        # 无法解析，保守按 FAIL 处理
-                                        step_passed = False
-                                        step_actual = (
-                                            f"Unable to parse assertion result: "
-                                            f"{done_message}"
+                                        # keyword 匹配失败，尝试用决策模型判断
+                                        judge_result = await _judge_assertion_with_decision_model(
+                                            step_name, done_message
                                         )
+                                        if judge_result is True:
+                                            step_passed = True
+                                        elif judge_result is False:
+                                            step_passed = False
+                                            step_actual = done_message
+                                        else:
+                                            # 无决策模型或判断失败，保守按 FAIL 处理
+                                            step_passed = False
+                                            step_actual = (
+                                                f"Unable to parse assertion result: "
+                                                f"{done_message}"
+                                            )
                                 event_data = {
                                     **event_data,
                                     "step_type": step_type,
@@ -1074,6 +1145,8 @@ class TaskManager:
                             has_assertion = True
                             if business_status is None:
                                 business_status = "ok"
+                            # 追加 prompt 约束，强制模型返回 PASS/FAIL 标识
+                            step_name = "断言" + step_name + _ASSERTION_SUFFIX
 
                         # 每步重置 agent 状态
                         agent.reset()
@@ -1117,11 +1190,23 @@ class TaskManager:
                                         step_passed = False
                                         step_actual = done_message
                                     else:
-                                        step_passed = False
-                                        step_actual = (
-                                            f"Unable to parse assertion result: "
-                                            f"{done_message}"
+                                        # keyword 匹配失败，尝试用决策模型判断
+                                        judge_result = await _judge_assertion_with_decision_model(
+                                            step_name, done_message
                                         )
+                                        logger.info(f"Assertion step {step_name} judge result: {judge_result}")
+                                        if judge_result is True:
+                                            step_passed = True
+                                        elif judge_result is False:
+                                            step_passed = False
+                                            step_actual = done_message
+                                        else:
+                                            # 无决策模型或判断失败，保守按 FAIL 处理
+                                            step_passed = False
+                                            step_actual = (
+                                                f"Unable to parse assertion result: "
+                                                f"{done_message}"
+                                            )
                                 event_data = {
                                     **event_data,
                                     "step_type": step_type,

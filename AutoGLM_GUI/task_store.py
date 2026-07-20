@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
@@ -13,9 +13,12 @@ from uuid import uuid4
 
 from .trace import current_trace_id, trace_span
 
+# 与服务端 Jackson time-zone: Asia/Shanghai 保持一致
+_CST = timezone(timedelta(hours=8))
+
 
 def _now_iso() -> str:
-    return datetime.now(tz=timezone.utc).isoformat()
+    return datetime.now(tz=_CST).isoformat()
 
 
 class TaskStatus(StrEnum):

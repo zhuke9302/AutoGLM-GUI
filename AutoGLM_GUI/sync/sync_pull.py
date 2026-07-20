@@ -229,6 +229,13 @@ class SyncPull:
                 server_values["agent_type"] = config.agent_type
             if config.default_max_steps is not None:
                 server_values["default_max_steps"] = config.default_max_steps
+            # 决策模型
+            if config.decision_base_url is not None:
+                server_values["decision_base_url"] = config.decision_base_url
+            if config.decision_model_name is not None:
+                server_values["decision_model_name"] = config.decision_model_name
+            if config.decision_api_key is not None:
+                server_values["decision_api_key"] = config.decision_api_key
 
             if server_values:
                 self._config.set_server_config(server_values)

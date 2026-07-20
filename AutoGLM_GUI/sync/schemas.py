@@ -162,6 +162,10 @@ class ServerConfigResponse(SyncBaseModel):
     agent_type: str | None = None
     default_max_steps: int | None = None
     updated_at: str | None = None
+    # 决策模型
+    decision_base_url: str | None = None
+    decision_model_name: str | None = None
+    decision_api_key: str | None = None
 
 
 # ---------------------------------------------------------------------------

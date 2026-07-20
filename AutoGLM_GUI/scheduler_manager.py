@@ -19,6 +19,14 @@ from AutoGLM_GUI.models.scheduled_task import ScheduledTask
 if TYPE_CHECKING:
     pass
 
+# 断言步骤 prompt 约束：强制模型在回复末尾输出 PASS 或 FAIL
+_ASSERTION_SUFFIX = (
+    "\n\n【重要】你必须在回复的最后一行，单独输出一行，内容仅为以下之一："
+    "\n- 如果断言成立，输出：RESULT: PASS"
+    "\n- 如果断言不成立，输出：RESULT: FAIL"
+    "\n不要遗漏这行结果标识。严格按照以上格式输出。"
+)
+
 
 @dataclass
 class DeviceExecutionResult:
@@ -292,6 +300,8 @@ class SchedulerManager:
                     # 默认业务状态：在出现 assertion 后初始化为 ok，失败时改为 abnormal
                     if business_status is None:
                         business_status = "ok"
+                    # 追加 prompt 约束，强制模型返回 PASS/FAIL 标识
+                    step_name = "断言" + step_name + _ASSERTION_SUFFIX
 
                 # 每步独立重置 agent 状态
                 agent.reset()
@@ -333,12 +343,25 @@ class SchedulerManager:
                                 step_passed = False
                                 step_actual = step_result_message
                             else:
-                                # 无法解析，保守按 FAIL 处理
-                                step_passed = False
-                                step_actual = (
-                                    f"Unable to parse assertion result: "
-                                    f"{step_result_message}"
+                                # keyword 匹配失败，尝试用决策模型判断
+                                from AutoGLM_GUI.task_manager import _judge_assertion_with_decision_model
+
+                                judge_result = await _judge_assertion_with_decision_model(
+                                    step_name, step_result_message
                                 )
+                                logger.info(f"Assertion step {step_name} judge result: {judge_result}")
+                                if judge_result is True:
+                                    step_passed = True
+                                elif judge_result is False:
+                                    step_passed = False
+                                    step_actual = step_result_message
+                                else:
+                                    # 无决策模型或判断失败，保守按 FAIL 处理
+                                    step_passed = False
+                                    step_actual = (
+                                        f"Unable to parse assertion result: "
+                                        f"{step_result_message}"
+                                    )
                             # 更新最后一条 step 消息的判定结果
                             if messages and messages[-1].role == "assistant":
                                 messages[-1].step_passed = step_passed
