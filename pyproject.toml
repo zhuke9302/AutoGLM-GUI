@@ -1,6 +1,6 @@
 [project]
-name = "autoglm-gui"
-version = "26.07.07"
+name = "ai-check"
+version = "26.7.7"
 description = "Web GUI for AutoGLM Phone Agent - AI-powered Android automation"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -42,10 +42,6 @@ dependencies = [
 
 [project.optional-dependencies]
 droidrun = ["droidrun>=0.4.0"]
-
-[project.urls]
-Homepage = "https://github.com/suyiiyii/AutoGLM-GUI"
-Repository = "https://github.com/suyiiyii/AutoGLM-GUI"
 
 [project.scripts]
 autoglm-gui = "AutoGLM_GUI.__main__:main"

@@ -198,6 +198,75 @@ function perfDiff(startMark, endMark) {
   return 0;
 }
 
+// ==================== .env 加载 ====================
+
+/**
+ * 解析 .env 文件内容为键值对
+ * @param {string} content - 文件内容
+ * @returns {Record<string, string>}
+ */
+function parseEnvContent(content) {
+  const parsed = {};
+  for (const rawLine of content.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) continue;
+    const eqIdx = line.indexOf('=');
+    if (eqIdx === -1) continue;
+    const key = line.slice(0, eqIdx).trim();
+    let value = line.slice(eqIdx + 1).trim();
+    // 去除首尾引号
+    if ((value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+    if (key) parsed[key] = value;
+  }
+  return parsed;
+}
+
+/**
+ * 加载 .env 配置（仅打包模式）
+ *
+ * 查找顺序：
+ *   1. 用户数据目录 (%APPDATA%/AutoGLM GUI/.env) — 用户可编辑
+ *   2. 如果不存在，从 extraResources 复制一份默认值过去
+ *
+ * @returns {Record<string, string>} 解析到的键值对
+ */
+function loadBundledEnv() {
+  if (!app.isPackaged) return {};
+
+  const userEnvPath = path.join(app.getPath('userData'), '.env');
+  const bundledEnvPath = path.join(process.resourcesPath, '.env');
+
+  // 用户目录已有 .env，直接使用
+  if (fs.existsSync(userEnvPath)) {
+    try {
+      const content = fs.readFileSync(userEnvPath, 'utf-8');
+      const parsed = parseEnvContent(content);
+      writeMainLog('info', '[Env] Loaded user .env', { path: userEnvPath, keys: Object.keys(parsed) });
+      return parsed;
+    } catch (err) {
+      writeMainLog('error', '[Env] Failed to read user .env', err);
+    }
+  }
+
+  // 用户目录没有 .env，从打包资源复制默认值
+  if (fs.existsSync(bundledEnvPath)) {
+    try {
+      fs.copyFileSync(bundledEnvPath, userEnvPath);
+      writeMainLog('info', '[Env] Copied bundled .env to userData', { from: bundledEnvPath, to: userEnvPath });
+      const content = fs.readFileSync(userEnvPath, 'utf-8');
+      return parseEnvContent(content);
+    } catch (err) {
+      writeMainLog('error', '[Env] Failed to copy bundled .env', err);
+    }
+  }
+
+  writeMainLog('warn', '[Env] No .env found', { bundledEnvPath, userEnvPath });
+  return {};
+}
+
 // ==================== 工具函数 ====================
 
 /**
@@ -428,8 +497,10 @@ async function startBackend() {
     }
   }
 
-  // 配置环境变量
+  // 配置环境变量：先加载打包的 .env，再叠加 process.env（系统环境变量优先）
+  const bundledEnv = loadBundledEnv();
   const env = {
+    ...bundledEnv,
     ...process.env,
     // NOTE: PYTHONUTF8 is ONLY effective in dev mode (running Python script directly)
     // For PyInstaller-frozen backend, UTF-8 mode is set via build-time OPTIONS in autoglm.spec

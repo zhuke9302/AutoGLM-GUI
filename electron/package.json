@@ -1,6 +1,6 @@
 {
-  "name": "智能巡检",
-  "version": "26.7.16",
+  "name": "ai-check",
+  "version": "26.7.7",
   "description": "AI-powered Android automation desktop app",
   "main": "main.js",
   "scripts": {
