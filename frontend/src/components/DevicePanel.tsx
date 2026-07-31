@@ -1336,12 +1336,7 @@ export function DevicePanel({
         </div>
       </Card>
 
-      {deviceConnectionType === 'web' ? (
-        <div className="rounded-lg border bg-card p-4 text-center text-sm text-muted-foreground">
-          <Monitor className="w-5 h-5 mx-auto mb-2" />
-          PC Web 浏览器巡检
-        </div>
-      ) : (
+      {deviceConnectionType !== 'web' && (
         <DeviceMonitor
           deviceId={deviceId}
           serial={deviceSerial}
