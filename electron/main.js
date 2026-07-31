@@ -161,6 +161,7 @@ autoUpdater.on('error', (err) => {
 
 // ==================== 全局变量 ====================
 let backendProcess = null;
+let midsceneProcess = null;
 let backendPort = null;
 let mainWindow = null;
 
@@ -641,6 +642,99 @@ function stopBackend() {
   }
 }
 
+// ==================== midscene-service 管理 ====================
+
+/**
+ * 启动 midscene-service 进程
+ */
+function startMidsceneService() {
+  const isDev = process.argv.includes('--dev');
+
+  const env = { ...process.env };
+  let serviceExe, spawnArgs, spawnOptions;
+
+  if (isDev) {
+    // 开发模式：使用 node 直接运行
+    const servicePath = path.join(__dirname, '..', 'midscene-service', 'server.js');
+    const fs = require('fs');
+    if (!fs.existsSync(servicePath)) {
+      writeMainLog('info', '[Midscene] Dev mode: midscene-service/server.js not found, skipping');
+      return;
+    }
+    serviceExe = 'node';
+    spawnArgs = [servicePath];
+    spawnOptions = { env };
+  } else {
+    // 生产模式：使用打包的可执行文件
+    const serviceDir = getResourcePath('midscene-service');
+    const exeName = process.platform === 'win32' ? 'midscene-service.exe' : 'midscene-service';
+    const exePath = path.join(serviceDir, exeName);
+
+    const fs = require('fs');
+    if (!fs.existsSync(exePath)) {
+      writeMainLog('info', '[Midscene] Production: midscene-service executable not found, skipping', { exePath });
+      return;
+    }
+    serviceExe = exePath;
+    spawnArgs = [];
+    spawnOptions = { env };
+  }
+
+  console.log(`启动 midscene-service: ${serviceExe} ${spawnArgs.join(' ')}`);
+  writeMainLog('info', '[Midscene] Starting midscene-service', {
+    executable: serviceExe,
+    args: spawnArgs,
+  });
+
+  midsceneProcess = spawn(serviceExe, spawnArgs, spawnOptions);
+
+  midsceneProcess.stdout?.on('data', (data) => {
+    const text = data.toString();
+    console.log(`[midscene-service] ${text}`);
+    for (const line of text.split(/\r?\n/)) {
+      if (line.trim()) {
+        writeMainLog('debug', '[Midscene][stdout]', line);
+      }
+    }
+  });
+
+  midsceneProcess.stderr?.on('data', (data) => {
+    const text = data.toString();
+    console.error(`[midscene-service] ${text}`);
+    for (const line of text.split(/\r?\n/)) {
+      if (line.trim()) {
+        writeMainLog('warn', '[Midscene][stderr]', line);
+      }
+    }
+  });
+
+  midsceneProcess.on('error', (error) => {
+    console.error('midscene-service 进程启动失败:', error);
+    writeMainLog('error', '[Midscene] Process error', error);
+    midsceneProcess = null;
+  });
+
+  midsceneProcess.on('exit', (code, signal) => {
+    console.log(`[midscene-service] 进程退出 (code: ${code}, signal: ${signal})`);
+    writeMainLog('info', '[Midscene] Process exited', { code, signal });
+    midsceneProcess = null;
+  });
+}
+
+/**
+ * 停止 midscene-service 进程
+ */
+function stopMidsceneService() {
+  if (midsceneProcess) {
+    console.log('正在停止 midscene-service...');
+    writeMainLog('info', '[Midscene] Stopping midscene-service', {
+      pid: midsceneProcess?.pid ?? null
+    });
+    midsceneProcess.kill('SIGTERM');
+    midsceneProcess = null;
+  }
+}
+
 // ==================== 窗口管理 ====================
 
 /**
@@ -1001,15 +1095,19 @@ app.whenReady().then(async () => {
     // 打印后端日志位置
     printLogLocation();
 
-    // 4. 创建主窗口
+    // 4. 启动 midscene-service
+    startMidsceneService();
+    writeMainLog('info', '[App] Midscene-service started');
+
+    // 5. 创建主窗口
     createWindow();
     writeMainLog('info', '[App] Main window created');
 
-    // 5. 创建自定义菜单
+    // 6. 创建自定义菜单
     createMenu();
     writeMainLog('info', '[App] Application menu created');
 
-    // 6. 检查更新（仅生产环境）
+    // 7. 检查更新（仅生产环境）
     if (app.isPackaged) {
       // 延迟 5 秒检查更新，避免干扰启动性能
       setTimeout(() => {
@@ -1052,6 +1150,7 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   app.isQuitting = true;
   writeMainLog('info', '[App] before-quit event');
+  stopMidsceneService();
   stopBackend();
 });
 

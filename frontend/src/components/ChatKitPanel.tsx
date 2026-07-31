@@ -21,6 +21,8 @@ import {
   Loader2,
   Square,
   Hand,
+  Monitor,
+  MonitorPlay,
 } from 'lucide-react';
 import type { Workflow, HistoryRecordResponse } from '../api';
 import {
@@ -71,11 +73,19 @@ interface ChatKitPanelProps {
 // 执行步骤类型
 interface ExecutionStep {
   id: string;
-  type: 'user' | 'thinking' | 'tool_call' | 'tool_result' | 'assistant';
+  type:
+    | 'user'
+    | 'thinking'
+    | 'tool_call'
+    | 'tool_result'
+    | 'assistant'
+    | 'step';
   content: string;
   toolName?: string;
   toolArgs?: Record<string, unknown>;
   toolResult?: string;
+  screenshotUrl?: string;
+  screenshot?: string;
   timestamp: Date;
   isExpanded?: boolean;
 }
@@ -196,6 +206,33 @@ function buildExecutionSteps(
         timestamp: new Date(event.created_at),
         isExpanded: true,
       });
+    } else if (event.event_type === 'step') {
+      // Step events from classic/layered agents may carry screenshots
+      const hasScreenshot =
+        typeof payload.screenshot_url === 'string' ||
+        typeof payload.screenshot === 'string';
+      if (hasScreenshot) {
+        steps.push({
+          id: `step-${event.task_id}-${event.seq}`,
+          type: 'step',
+          content:
+            typeof payload.step_name === 'string'
+              ? payload.step_name
+              : typeof payload.thinking === 'string'
+                ? payload.thinking
+                : `Step ${payload.step ?? ''}`,
+          screenshotUrl:
+            typeof payload.screenshot_url === 'string'
+              ? payload.screenshot_url
+              : undefined,
+          screenshot:
+            typeof payload.screenshot === 'string'
+              ? payload.screenshot
+              : undefined,
+          timestamp: new Date(event.created_at),
+          isExpanded: true,
+        });
+      }
     }
   });
 
@@ -965,11 +1002,15 @@ export function ChatKitPanel({
                                       className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium ${
                                         step.type === 'tool_call'
                                           ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
-                                          : 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400'
+                                          : step.type === 'step'
+                                            ? 'bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400'
+                                            : 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400'
                                       }`}
                                     >
                                       {step.type === 'tool_call' ? (
                                         <Wrench className="w-3 h-3" />
+                                      ) : step.type === 'step' ? (
+                                        <MonitorPlay className="w-3 h-3" />
                                       ) : (
                                         <MessageSquare className="w-3 h-3" />
                                       )}
@@ -1035,6 +1076,21 @@ export function ChatKitPanel({
                                                   2
                                                 )}
                                           </pre>
+                                        </div>
+                                      )}
+                                    {step.type === 'step' &&
+                                      (step.screenshotUrl ||
+                                        step.screenshot) && (
+                                        <div className="rounded-lg overflow-hidden">
+                                          <img
+                                            src={
+                                              step.screenshotUrl ||
+                                              `data:image/png;base64,${step.screenshot}`
+                                            }
+                                            alt={step.content}
+                                            className="max-w-full rounded-lg shadow-md"
+                                            style={{ maxHeight: '400px' }}
+                                          />
                                         </div>
                                       )}
                                   </div>
@@ -1246,12 +1302,19 @@ export function ChatKitPanel({
         </div>
       </Card>
 
-      <DeviceMonitor
-        deviceId={deviceId}
-        serial={deviceSerial}
-        connectionType={deviceConnectionType}
-        isVisible={isVisible}
-      />
+      {deviceConnectionType === 'web' ? (
+        <div className="rounded-lg border bg-card p-4 text-center text-sm text-muted-foreground">
+          <Monitor className="w-5 h-5 mx-auto mb-2" />
+          PC Web 浏览器巡检
+        </div>
+      ) : (
+        <DeviceMonitor
+          deviceId={deviceId}
+          serial={deviceSerial}
+          connectionType={deviceConnectionType}
+          isVisible={isVisible}
+        />
+      )}
     </div>
   );
 }

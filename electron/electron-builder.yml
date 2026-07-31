@@ -33,6 +33,10 @@ extraResources:
     to: backend
   - from: ../resources/adb
     to: adb
+  - from: ../resources/midscene-service
+    to: midscene-service
+    filter:
+      - "**/*"
 
 win:
   target:

@@ -39,6 +39,7 @@ export interface TaskConversationMessage {
   thinking?: string[];
   actions?: Record<string, unknown>[];
   screenshots?: (string | undefined)[];
+  screenshotUrls?: (string | undefined)[];
   stepTimings?: (StepTimingSummary | undefined)[];
   errorDetails?: ModelErrorDetails;
   isStreaming?: boolean;
@@ -149,6 +150,7 @@ function buildAssistantMessage(
   const thinking: string[] = [];
   const actions: Record<string, unknown>[] = [];
   const screenshots: (string | undefined)[] = [];
+  const screenshotUrls: (string | undefined)[] = [];
   const stepTimings: (StepTimingSummary | undefined)[] = [];
   const stepNumbers: number[] = [];
   let errorDetails: ModelErrorDetails | undefined;
@@ -187,6 +189,11 @@ function buildAssistantMessage(
         screenshots.push(
           typeof payload.screenshot === 'string'
             ? payload.screenshot
+            : undefined
+        );
+        screenshotUrls.push(
+          typeof payload.screenshot_url === 'string'
+            ? payload.screenshot_url
             : undefined
         );
         stepTimings.push(
@@ -259,6 +266,7 @@ function buildAssistantMessage(
     thinking,
     actions,
     screenshots,
+    screenshotUrls,
     stepTimings,
     stepNumbers,
     errorDetails,

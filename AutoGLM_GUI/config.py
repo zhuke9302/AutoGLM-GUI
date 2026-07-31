@@ -8,6 +8,7 @@
 - 避免在 API 层和业务层直接使用外部库的类型
 """
 
+import os
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -39,6 +40,11 @@ class ModelConfig:
     frequency_penalty: float = 0.2
     extra_body: dict[str, Any] = field(default_factory=dict)
     lang: str = "cn"
+    midscene_service_url: str = field(
+        default_factory=lambda: os.environ.get(
+            "MIDSCENE_SERVICE_URL", "http://localhost:39000"
+        )
+    )
 
 
 @dataclass

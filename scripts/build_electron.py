@@ -8,10 +8,11 @@ AutoGLM-GUI Electron 一键构建脚本
 3. 构建前端
 4. 下载 ADB 工具
 5. 打包 Python 后端
-6. 构建 Electron 应用
+6. 打包 midscene-service
+7. 构建 Electron 应用
 
 用法：
-    uv run python scripts/build_electron.py [--skip-frontend] [--skip-adb] [--skip-backend] [--publish MODE]
+    uv run python scripts/build_electron.py [--skip-frontend] [--skip-adb] [--skip-backend] [--skip-midscene] [--publish MODE]
 
 发布模式 (--publish):
     never   - 不发布（默认，用于本地开发）
@@ -144,7 +145,7 @@ class ElectronBuilder:
 
     def check_environment(self) -> bool:
         """检查环境依赖"""
-        print_step("检查环境依赖", 7, 1)
+        print_step("检查环境依赖", 8, 1)
 
         required_tools = {
             "uv": "Python 包管理器",
@@ -175,14 +176,14 @@ class ElectronBuilder:
 
     def sync_python_deps(self) -> bool:
         """同步 Python 开发依赖（含 droidrun 可选依赖）"""
-        print_step("同步 Python 开发依赖", 7, 2)
+        print_step("同步 Python 开发依赖", 8, 2)
         return run_command(
             ["uv", "sync", "--dev", "--extra", "droidrun"], cwd=self.root_dir
         )
 
     def build_frontend(self) -> bool:
         """构建前端"""
-        print_step("构建前端", 7, 3)
+        print_step("构建前端", 8, 3)
 
         # 安装前端依赖
         print("\n安装前端依赖...")
@@ -212,7 +213,7 @@ class ElectronBuilder:
 
     def download_adb(self) -> bool:
         """下载 ADB 工具"""
-        print_step("下载 ADB 工具", 7, 4)
+        print_step("下载 ADB 工具", 8, 4)
 
         # 确定要下载的平台
         platforms = []
@@ -239,7 +240,7 @@ class ElectronBuilder:
 
     def build_backend(self) -> bool:
         """打包 Python 后端"""
-        print_step("打包 Python 后端", 7, 5)
+        print_step("打包 Python 后端", 8, 5)
 
         # 清理旧的构建输出
         pyinstaller_dist = self.scripts_dir / "dist" / "autoglm-gui"
@@ -271,15 +272,58 @@ class ElectronBuilder:
 
         return True
 
+    def build_midscene_service(self) -> bool:
+        """打包 midscene-service 为独立可执行文件"""
+        print_step("打包 midscene-service", 8, 6)
+
+        service_dir = self.root_dir / "midscene-service"
+        if not service_dir.exists():
+            print_warning("midscene-service 目录不存在，跳过")
+            return True
+
+        # 安装依赖
+        print("\n安装 midscene-service 依赖...")
+        if not run_command(["npm", "install"], cwd=service_dir):
+            return False
+
+        # 确定输出文件名
+        output_name = "midscene-service.exe" if self.is_windows else "midscene-service"
+        output_dir = service_dir / "dist"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        output_path = output_dir / output_name
+
+        # 使用 pkg 打包为独立可执行文件
+        print(f"\n使用 pkg 打包 midscene-service ({output_name})...")
+        if not run_command(
+            [
+                "npx", "pkg", ".",
+                "--target", "node18-win-x64" if self.is_windows else "node18-linux-x64",
+                "--output", f"dist/{output_name}",
+            ],
+            cwd=service_dir,
+        ):
+            print_warning("midscene-service 打包失败，将跳过（应用仍可正常运行）")
+            return True
+
+        # 复制到 resources 目录
+        dest = self.resources_dir / "midscene-service"
+        if dest.exists():
+            shutil.rmtree(dest)
+        dest.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(output_path, dest / output_name)
+        print_success(f"midscene-service 已复制到 {dest}")
+
+        return True
+
     def build_electron(self) -> bool:
         """构建 Electron 应用"""
-        print_step("安装 Electron 依赖", 7, 6)
+        print_step("安装 Electron 依赖", 8, 7)
 
         # 安装 Electron 依赖（使用 pnpm，electron-builder 26.x+ 已支持）
         if not run_command(["pnpm", "install"], cwd=self.electron_dir):
             return False
 
-        print_step("构建 Electron 应用", 7, 7)
+        print_step("构建 Electron 应用", 8, 8)
 
         # 获取发布模式
         publish_mode = self.args.publish
@@ -352,6 +396,12 @@ class ElectronBuilder:
                 if not self.args.skip_backend
                 else (print_warning("跳过后端打包"), True)[1],
             ),
+            (
+                "midscene-service",
+                lambda: self.build_midscene_service()
+                if not self.args.skip_midscene
+                else (print_warning("跳过 midscene-service 打包"), True)[1],
+            ),
             ("Electron", lambda: self.build_electron()),
         ]
 
@@ -368,6 +418,7 @@ def main():
     parser.add_argument("--skip-frontend", action="store_true", help="跳过前端构建")
     parser.add_argument("--skip-adb", action="store_true", help="跳过 ADB 工具下载")
     parser.add_argument("--skip-backend", action="store_true", help="跳过后端打包")
+    parser.add_argument("--skip-midscene", action="store_true", help="跳过 midscene-service 打包")
     parser.add_argument(
         "--publish",
         choices=["never", "onTag", "always"],

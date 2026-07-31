@@ -64,3 +64,6 @@ docs/static/img/screenshots/_manifest.json
 .vscode/
 .idea/
 test-results/
+
+midscene-service/node_modules/
+midscene-service/midscene_run/

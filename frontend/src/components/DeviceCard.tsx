@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   Edit,
   Loader2,
+  Monitor,
   Server,
   Smartphone,
   Trash2,
@@ -238,13 +239,23 @@ export function DeviceCard({
           {/* Device icon and info */}
           <div className="flex-1 min-w-0 flex flex-col justify-center gap-0.5">
             <div className="flex items-center gap-2">
-              <Smartphone
-                className={`w-4 h-4 flex-shrink-0 ${
-                  isActive
-                    ? 'text-[#1d9bf0]'
-                    : 'text-slate-400 dark:text-slate-500'
-                }`}
-              />
+              {connectionType === 'web' ? (
+                <Monitor
+                  className={`w-4 h-4 flex-shrink-0 ${
+                    isActive
+                      ? 'text-[#1d9bf0]'
+                      : 'text-slate-400 dark:text-slate-500'
+                  }`}
+                />
+              ) : (
+                <Smartphone
+                  className={`w-4 h-4 flex-shrink-0 ${
+                    isActive
+                      ? 'text-[#1d9bf0]'
+                      : 'text-slate-400 dark:text-slate-500'
+                  }`}
+                />
+              )}
               <span
                 className={`font-semibold text-sm truncate ${
                   isActive

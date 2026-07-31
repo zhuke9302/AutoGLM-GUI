@@ -280,3 +280,33 @@ def _create_qwen_agent(
 
 
 register_agent("qwen", _create_qwen_agent)
+
+
+def _create_midscene_web_agent(
+    model_config: ModelConfig,
+    agent_config: AgentConfig,
+    agent_specific_config: AgentSpecificConfig,
+    device: DeviceProtocol,
+    takeover_callback: Callable[..., Any] | None = None,
+    confirmation_callback: Callable[..., Any] | None = None,
+) -> AsyncAgent:
+    """Create MidsceneWebAgent instance.
+
+    Agent for PC Web inspection via midscene-service SSE API.
+    Requires midscene-service running at the configured URL.
+    """
+    from .midscene_web.async_agent import MidsceneWebAgent
+
+    service_url = agent_specific_config.get("service_url", "http://localhost:39000")
+
+    return MidsceneWebAgent(  # type: ignore[return-value]
+        model_config=model_config,
+        agent_config=agent_config,
+        device=device,
+        service_url=service_url,
+        takeover_callback=takeover_callback,
+        confirmation_callback=confirmation_callback,
+    )
+
+
+register_agent("midscene-web", _create_midscene_web_agent)

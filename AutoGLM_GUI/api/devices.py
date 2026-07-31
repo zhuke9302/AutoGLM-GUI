@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter
@@ -109,6 +110,23 @@ def list_devices() -> DeviceListResponse:
     devices_with_agents = [
         _build_device_response_with_agent(d, agent_manager) for d in managed_devices
     ]
+
+    # 如果 MIDSCENE_SERVICE_URL 环境变量已配置，添加虚拟 PC Web 浏览器设备
+    midscene_url = os.environ.get("MIDSCENE_SERVICE_URL", "")
+    if midscene_url:
+        web_device = DeviceResponse(
+            id="web-browser",
+            serial="web-browser",
+            model="PC Web Browser",
+            status="online",
+            connection_type="web",
+            state="idle",
+            is_available_only=False,
+            display_name="PC Web 浏览器",
+            group_id="default",
+            agent=None,
+        )
+        devices_with_agents.append(web_device)
 
     return DeviceListResponse(devices=devices_with_agents)
 

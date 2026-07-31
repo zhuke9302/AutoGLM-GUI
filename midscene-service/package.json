@@ -1,0 +1,20 @@
+{
+  "name": "midscene-service",
+  "version": "1.0.0",
+  "description": "Midscene Web Patrol Service - Playwright + @midscene/web",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "@midscene/web": "^1.0.0",
+    "@playwright/test": "^1.45.0",
+    "dotenv": "^16.4.0",
+    "express": "^4.21.0",
+    "playwright": "^1.45.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

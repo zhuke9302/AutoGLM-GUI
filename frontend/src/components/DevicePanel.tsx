@@ -12,6 +12,7 @@ import {
   ImagePlus,
   X,
   Hand,
+  Monitor,
 } from 'lucide-react';
 import { DeviceMonitor } from './DeviceMonitor';
 import type {
@@ -360,14 +361,19 @@ export function DevicePanel({
       const thinkingList: string[] = [];
       const actionsList: Record<string, unknown>[] = [];
       const screenshotsList: (string | undefined)[] = [];
+      const screenshotUrlsList: (string | undefined)[] = [];
       selectedRecord.messages
         .filter(m => m.role === 'assistant')
         .forEach(m => {
           if (m.thinking) thinkingList.push(m.thinking);
           if (m.action) actionsList.push(m.action);
           // Extract screenshot directly or from loosely typed object
-          const recordData = m as unknown as { screenshot?: string };
+          const recordData = m as unknown as {
+            screenshot?: string;
+            screenshot_url?: string;
+          };
           screenshotsList.push(recordData.screenshot);
+          screenshotUrlsList.push(recordData.screenshot_url);
         });
 
       // Create agent message
@@ -383,6 +389,7 @@ export function DevicePanel({
         thinking: thinkingList,
         actions: actionsList,
         screenshots: screenshotsList,
+        screenshotUrls: screenshotUrlsList,
         stepTimings: selectedRecord.step_timings,
         isStreaming: false,
       };
@@ -824,12 +831,19 @@ export function DevicePanel({
                         ).map(idx => {
                           const stepThinking = message.thinking?.[idx];
                           const stepAction = message.actions?.[idx];
+                          const stepScreenshotUrl =
+                            message.screenshotUrls?.[idx];
                           const stepScreenshot = message.screenshots?.[idx];
                           const stepTimings = message.stepTimings?.[idx];
                           const stepSummary = getStepSummary(
                             stepThinking,
                             stepAction
                           );
+                          const screenshotSrc = stepScreenshotUrl
+                            ? stepScreenshotUrl
+                            : stepScreenshot
+                              ? `data:image/png;base64,${stepScreenshot}`
+                              : null;
 
                           return (
                             <div
@@ -862,10 +876,10 @@ export function DevicePanel({
                                 </div>
                               )}
 
-                              {stepScreenshot && (
+                              {screenshotSrc && (
                                 <div className="mt-3">
                                   <ImagePreview
-                                    src={`data:image/png;base64,${stepScreenshot}`}
+                                    src={screenshotSrc}
                                     alt={`Step ${idx + 1}`}
                                     maxHeight="350px"
                                   >
@@ -1322,12 +1336,19 @@ export function DevicePanel({
         </div>
       </Card>
 
-      <DeviceMonitor
-        deviceId={deviceId}
-        serial={deviceSerial}
-        connectionType={deviceConnectionType}
-        isVisible={isVisible} // ✅ 修改：传递实际的 isVisible（原为硬编码 true）
-      />
+      {deviceConnectionType === 'web' ? (
+        <div className="rounded-lg border bg-card p-4 text-center text-sm text-muted-foreground">
+          <Monitor className="w-5 h-5 mx-auto mb-2" />
+          PC Web 浏览器巡检
+        </div>
+      ) : (
+        <DeviceMonitor
+          deviceId={deviceId}
+          serial={deviceSerial}
+          connectionType={deviceConnectionType}
+          isVisible={isVisible}
+        />
+      )}
     </div>
   );
 }

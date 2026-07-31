@@ -45,6 +45,7 @@ import {
   Cpu,
   Info,
   Smartphone,
+  Monitor,
   Loader2,
 } from 'lucide-react';
 import { useTranslation } from '../lib/i18n-context';
@@ -120,6 +121,13 @@ const AGENT_PRESETS = [
     defaultConfig: {
       model_family: 'doubao-vision',
     },
+  },
+  {
+    name: 'midscene-web',
+    displayName: 'Midscene Web Agent',
+    descriptionKey: 'agentMidsceneWebDesc',
+    icon: Monitor,
+    defaultConfig: {},
   },
   // Qwen Agent 已禁用
   // {
@@ -314,6 +322,31 @@ export function ChatComponent() {
       selectDeviceBySerial(searchParams.serial);
     }
   }, [searchParams.serial, selectDeviceBySerial]);
+
+  // 当选择 Web 设备时自动切换 Agent 为 midscene-web
+  const prevDeviceTypeRef = useRef<string | undefined>(undefined);
+  const lastMobileAgentRef = useRef<string>('glm-async');
+
+  useEffect(() => {
+    const currentType = currentDevice?.connection_type;
+    const prevType = prevDeviceTypeRef.current;
+    if (currentType === 'web' && prevType !== 'web') {
+      // 从移动设备切换到 Web 设备：记录当前 agent，切换到 midscene-web
+      lastMobileAgentRef.current = config?.agent_type || 'glm-async';
+      setTempConfig(prev => ({ ...prev, agent_type: 'midscene-web' }));
+      setConfig(prev => prev ? { ...prev, agent_type: 'midscene-web' } : prev);
+    } else if (currentType !== 'web' && prevType === 'web') {
+      // 从 Web 设备切换回移动设备：恢复上一个移动端 agent
+      setTempConfig(prev => ({
+        ...prev,
+        agent_type: lastMobileAgentRef.current,
+      }));
+      setConfig(prev =>
+        prev ? { ...prev, agent_type: lastMobileAgentRef.current } : prev
+      );
+    }
+    prevDeviceTypeRef.current = currentType;
+  }, [currentDevice?.connection_type]);
 
   // Sync state changes to URL search params
   useEffect(() => {

@@ -563,16 +563,29 @@ class TaskManager:
                     trace_id=trace_id,
                     source="classic_chat",
                 )
+                # Web 设备强制使用 midscene-web agent，不受全局配置影响
+                if device_id == "web-browser":
+                    effective_agent_type = "midscene-web"
+                else:
+                    effective_agent_type = None
+
+                logger.info(
+                    f"[TaskManager] 经典聊天开始: task_id={task_id}, "
+                    f"device_id={device_id}, session_id={session_id}"
+                )
                 acquired = await manager.acquire_device_async(
                     device_id,
                     auto_initialize=True,
                     context=context,
+                    agent_type=effective_agent_type,
                 )
+                logger.info(f"[TaskManager] acquire_device_async 完成: acquired={acquired}")
                 agent = await manager.get_agent_with_context_async(
                     device_id,
                     context=context,
                     agent_type=None,
                 )
+                logger.info(f"[TaskManager] get_agent 完成: agent_type={type(agent).__name__}")
                 user_image_attachments = await asyncio.to_thread(
                     self._get_task_user_image_attachments,
                     task_id,

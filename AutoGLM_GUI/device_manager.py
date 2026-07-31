@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import threading
 import time
 from collections import defaultdict
@@ -1071,13 +1072,13 @@ class DeviceManager:
         """
         根据 device_id 获取 DeviceProtocol 实例（统一入口）.
 
-        自动识别设备类型（ADB / Remote）并返回对应的实现。
+        自动识别设备类型（ADB / Remote / Web）并返回对应的实现。
 
         Args:
             device_id: 连接端点标识（USB serial / IP:port / base_url|device_id）
 
         Returns:
-            DeviceProtocol 实例（ADBDevice 或 RemoteDevice）
+            DeviceProtocol 实例（ADBDevice / RemoteDevice / WebDevice）
 
         Raises:
             ValueError: 设备未找到或不可用
@@ -1087,6 +1088,13 @@ class DeviceManager:
             >>> device = manager.get_device_protocol("192.168.1.100:5555")
             >>> screenshot = device.get_screenshot()  # 不关心是 ADB 还是 Remote
         """
+        # Web 设备：返回 WebDevice
+        if device_id == "web-browser":
+            from AutoGLM_GUI.devices.web_device import WebDevice
+
+            service_url = os.environ.get("MIDSCENE_SERVICE_URL", "http://localhost:39000")
+            return WebDevice(device_id=device_id, service_url=service_url)  # type: ignore[return-value]
+
         with self._devices_lock:
             # 1. 查找设备元数据
             managed = self.get_device_by_device_id(device_id)
@@ -1125,6 +1133,14 @@ class DeviceManager:
         需在独立线程中执行，避免在运行中的事件循环里调用 ``asyncio.run()``
         导致 ``RuntimeError`` 与协程未 await 警告。
         """
+        # Web 设备：返回 WebDevice 的异步适配器
+        if device_id == "web-browser":
+            from AutoGLM_GUI.devices.async_adapter import AsyncDeviceAdapter
+            from AutoGLM_GUI.devices.web_device import WebDevice
+
+            service_url = os.environ.get("MIDSCENE_SERVICE_URL", "http://localhost:39000")
+            return AsyncDeviceAdapter(WebDevice(device_id=device_id, service_url=service_url))  # type: ignore[return-value]
+
         with self._devices_lock:
             managed = self.get_device_by_device_id(device_id)
             if not managed:

@@ -424,6 +424,11 @@ class PhoneAgentManager:
         )
         # 使用提供的 agent_type 或从配置中获取
         effective_agent_type = agent_type or effective_config.agent_type
+        logger.info(
+            f"[PhoneAgentManager] agent_type 解析: "
+            f"入参={agent_type}, config={effective_config.agent_type}, "
+            f"最终={effective_agent_type}"
+        )
 
         # Web模式下使用空回调函数，不阻塞CLI
         # 前端会通过事件流检测交互action并处理用户输入
@@ -620,6 +625,7 @@ class PhoneAgentManager:
         timeout: float | None = None,
         raise_on_timeout: bool = True,
         context: str = "default",
+        agent_type: str | None = None,
     ) -> bool:
         """
         Atomically transition device state from IDLE to BUSY.
@@ -659,7 +665,7 @@ class PhoneAgentManager:
         async with self._manager_lock:
             if agent_key not in self._agents:
                 if auto_initialize:
-                    await self._auto_initialize_agent_unsafe(agent_key, device_id)
+                    await self._auto_initialize_agent_unsafe(agent_key, device_id, agent_type=agent_type)
                 else:
                     raise AgentNotInitializedError(
                         f"Agent not initialized for device {agent_key}. "
@@ -710,6 +716,7 @@ class PhoneAgentManager:
         timeout: float | None = None,
         raise_on_timeout: bool = True,
         context: str = "default",
+        agent_type: str | None = None,
     ) -> bool:
         """Acquire a device lock without leaking it if the awaiter is cancelled."""
         acquire_task = asyncio.create_task(
@@ -719,6 +726,7 @@ class PhoneAgentManager:
                 timeout=timeout,
                 raise_on_timeout=raise_on_timeout,
                 context=context,
+                agent_type=agent_type,
             )
         )
 
