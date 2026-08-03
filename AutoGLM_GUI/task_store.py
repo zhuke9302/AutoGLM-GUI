@@ -159,6 +159,12 @@ class TaskStore:
             )
         if "trace_id" not in columns:
             self._conn.execute("ALTER TABLE task_runs ADD COLUMN trace_id TEXT NULL")
+        if "env_url" not in columns:
+            self._conn.execute("ALTER TABLE task_runs ADD COLUMN env_url TEXT NULL")
+        if "execute_account" not in columns:
+            self._conn.execute("ALTER TABLE task_runs ADD COLUMN execute_account TEXT NULL")
+        if "execute_password" not in columns:
+            self._conn.execute("ALTER TABLE task_runs ADD COLUMN execute_password TEXT NULL")
         self._conn.commit()
 
     def _fetchone(self, query: str, params: tuple[Any, ...] = ()) -> sqlite3.Row | None:
@@ -383,6 +389,9 @@ class TaskStore:
         task_id: str | None = None,
         trace_id: str | None = None,
         business_status: str | None = None,
+        env_url: str = "",
+        execute_account: str = "",
+        execute_password: str = "",
     ) -> TaskRecord:
         self._ensure_ready()
         now = _now_iso()
@@ -413,8 +422,9 @@ class TaskStore:
                         id, source, executor_key, session_id, scheduled_task_id, workflow_uuid,
                         schedule_fire_id, device_id, device_serial, status, input_text,
                         final_message, error_message, stop_reason, business_status, trace_id,
-                        step_count, created_at, started_at, finished_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?, 0, ?, NULL, NULL)
+                        step_count, created_at, started_at, finished_at,
+                        env_url, execute_account, execute_password
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?, 0, ?, NULL, NULL, ?, ?, ?)
                     """,
                     (
                         record_id,
@@ -431,6 +441,9 @@ class TaskStore:
                         business_status,
                         task_trace_id,
                         now,
+                        env_url,
+                        execute_account,
+                        execute_password,
                     ),
                 )
                 if session_id:

@@ -68,6 +68,7 @@ export function DeviceCard({
   const isUsb = connectionType === 'usb';
   const isWifi = connectionType === 'wifi';
   const isRemote = connectionType === 'remote';
+  const isLocal = connectionType === 'local';
   const [loading, setLoading] = useState(false);
   const [showWifiConfirm, setShowWifiConfirm] = useState(false);
   const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false);
@@ -80,7 +81,7 @@ export function DeviceCard({
   // Determine agent status indicator class and tooltip
   const getAgentStatusClass = () => {
     if (!isOnline) return 'status-agent-none';
-    if (!agent) return 'status-agent-none';
+    if (!agent) return 'status-agent-idle';
     switch (agent.state) {
       case 'idle':
         return 'status-agent-idle';
@@ -91,13 +92,13 @@ export function DeviceCard({
       case 'initializing':
         return 'status-agent-initializing';
       default:
-        return 'status-agent-none';
+        return 'status-agent-idle';
     }
   };
 
   const getCurrentStatusText = () => {
     if (!isOnline) return t.deviceCard.statusTooltip.none;
-    if (!agent) return t.deviceCard.statusTooltip.none;
+    if (!agent) return t.deviceCard.statusTooltip.idle;
     switch (agent.state) {
       case 'idle':
         return t.deviceCard.statusTooltip.idle;
@@ -239,7 +240,7 @@ export function DeviceCard({
           {/* Device icon and info */}
           <div className="flex-1 min-w-0 flex flex-col justify-center gap-0.5">
             <div className="flex items-center gap-2">
-              {connectionType === 'web' ? (
+              {serial === 'web-browser' ? (
                 <Monitor
                   className={`w-4 h-4 flex-shrink-0 ${
                     isActive
@@ -296,7 +297,17 @@ export function DeviceCard({
           <div className="flex-shrink-0 flex flex-col items-end gap-1">
             {/* Connection type badge */}
             {(() => {
-              if (isRemote) {
+              if (isLocal) {
+                return (
+                  <Badge
+                    variant="outline"
+                    className="text-xs border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-400"
+                  >
+                    <Monitor className="w-2.5 h-2.5 mr-1" />
+                    {t.deviceCard.local || 'Local'}
+                  </Badge>
+                );
+              } else if (isRemote) {
                 return (
                   <Badge
                     variant="outline"

@@ -816,10 +816,12 @@ export function ChatKitPanel({
     }
   };
 
+  const isWebDevice = deviceSerial === 'web-browser';
+
   return (
     <div className="flex-1 flex gap-4 p-4 items-stretch justify-center min-h-0">
       {/* Chat Area with Execution Steps */}
-      <Card className="flex-1 flex flex-col min-h-0 max-w-2xl overflow-hidden">
+      <Card className={`flex-1 flex flex-col min-h-0 overflow-hidden ${isWebDevice ? '' : 'max-w-2xl'}`}>
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-800">
           <div className="flex items-center gap-3">
@@ -1302,7 +1304,7 @@ export function ChatKitPanel({
         </div>
       </Card>
 
-      {deviceConnectionType !== 'web' && (
+      {!isWebDevice && (
         <DeviceMonitor
           deviceId={deviceId}
           serial={deviceSerial}

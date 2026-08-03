@@ -240,6 +240,7 @@ export const en = {
     agentError: 'Error',
     agentInitializing: 'Initializing',
     remote: 'Remote',
+    local: 'Local',
     wifi: 'WiFi',
     removeRemote: 'Remove Remote Device',
     connectWifiTitle: 'Connect via WiFi',

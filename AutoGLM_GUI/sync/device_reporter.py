@@ -137,7 +137,7 @@ class DeviceReporter:
     def _map_connection_type(dev) -> str:
         """Map device connection type to protocol string."""
         ct = dev.connection_type  # DeviceConnectionType property
-        if ct and ct.value in ("usb", "wifi", "remote"):
+        if ct and ct.value in ("usb", "wifi", "remote", "local"):
             return ct.value
         return "usb"
 

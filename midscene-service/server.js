@@ -60,13 +60,13 @@ app.get('/health', (_req, res) => {
 // ------------------------------------------------------------------ /execute
 
 app.post('/execute', async (req, res) => {
-  const { url, prompt, taskId } = req.body || {};
+  const { url, prompt, taskId, skipNavigate } = req.body || {};
 
-  serviceLogger.info('server', `POST /execute: url=${url}, prompt=${prompt}, taskId=${taskId}`);
+  serviceLogger.info('server', `POST /execute: url=${url}, prompt=${prompt}, taskId=${taskId}, skipNavigate=${skipNavigate}`);
 
-  if (!url || !prompt) {
-    serviceLogger.warn('server', `缺少参数: url=${url}, prompt=${prompt}`);
-    return res.status(400).json({ error: '缺少 url 或 prompt 参数' });
+  if (!prompt) {
+    serviceLogger.warn('server', `缺少参数: prompt=${prompt}`);
+    return res.status(400).json({ error: '缺少 prompt 参数' });
   }
 
   // 设置 SSE 响应头
@@ -87,7 +87,7 @@ app.post('/execute', async (req, res) => {
 
   try {
     await ensureBrowser();
-    await executor.execute(url, prompt, taskId, sendEvent);
+    await executor.execute(url || 'about:blank', prompt, taskId, sendEvent, !!skipNavigate);
   } catch (err) {
     sendEvent({
       type: 'error',
@@ -165,6 +165,26 @@ app.post('/navigate', async (req, res) => {
     res.json({ status: 'ok' });
   } catch (err) {
     serviceLogger.error('server', `/navigate 失败: ${err.message}`);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ------------------------------------------------------------------ /login
+
+app.post('/login', async (req, res) => {
+  const { url, account, password } = req.body || {};
+  serviceLogger.info('server', `POST /login: url=${url}, account=${account}`);
+  if (!url || !account || !password) {
+    serviceLogger.warn('server', '/login 缺少参数');
+    return res.status(400).json({ error: '缺少 url、account 或 password 参数' });
+  }
+  try {
+    await ensureBrowser();
+    const result = await executor.login(url, account, password);
+    serviceLogger.info('server', `/login 完成: url=${url}, account=${account}`);
+    res.json({ status: 'ok', ...result });
+  } catch (err) {
+    serviceLogger.error('server', `/login 失败: ${err.message}`);
     res.status(500).json({ error: err.message });
   }
 });

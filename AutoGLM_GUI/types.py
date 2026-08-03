@@ -135,8 +135,10 @@ class DeviceConnectionType(Enum):
     - USB: Physical USB connection
     - WIFI: ADB over WiFi (local network)
     - REMOTE: HTTP Remote Device (via Device Agent Server)
+    - LOCAL: Local bundled service (e.g. midscene-service for PC Web)
     """
 
     USB = "usb"
     WIFI = "wifi"
     REMOTE = "remote"
+    LOCAL = "local"

@@ -60,7 +60,7 @@ class ClientHeartbeatResponse(SyncBaseModel):
 class DeviceReportItem(SyncBaseModel):
     serial: str
     model: str
-    connection_type: Literal["usb", "wifi", "remote"]
+    connection_type: Literal["usb", "wifi", "remote", "local"]
     status: Literal["online", "offline"]
     display_name: str | None = None
     group_id: str | None = None
@@ -92,6 +92,9 @@ class ScheduledTaskSyncItem(SyncBaseModel):
     enabled: bool
     execution_mode: Literal["classic", "layered"]
     updated_at: str
+    env_url: str | None = None
+    execute_account: str | None = None
+    execute_password: str | None = None
 
 
 class ScheduledTaskSyncResponse(SyncBaseModel):
@@ -260,6 +263,9 @@ class SSETaskDispatch(SyncBaseModel):
     scheduled_task_id: str
     fire_id: str
     device_serialnos: list[str]
+    env_url: str | None = None
+    execute_account: str | None = None
+    execute_password: str | None = None
 
 
 # ---------------------------------------------------------------------------

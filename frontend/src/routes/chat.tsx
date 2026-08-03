@@ -328,7 +328,7 @@ export function ChatComponent() {
   const lastMobileAgentRef = useRef<string>('glm-async');
 
   useEffect(() => {
-    const currentType = currentDevice?.connection_type;
+    const currentType = currentDevice?.serial === 'web-browser' ? 'web' : currentDevice?.connection_type;
     const prevType = prevDeviceTypeRef.current;
     if (currentType === 'web' && prevType !== 'web') {
       // 从移动设备切换到 Web 设备：记录当前 agent，切换到 midscene-web
@@ -346,7 +346,7 @@ export function ChatComponent() {
       );
     }
     prevDeviceTypeRef.current = currentType;
-  }, [currentDevice?.connection_type]);
+  }, [currentDevice?.serial, currentDevice?.connection_type]);
 
   // Sync state changes to URL search params
   useEffect(() => {

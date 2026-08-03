@@ -261,6 +261,9 @@ class TaskManager:
         input_text: str,
         schedule_fire_id: str,
         executor_key: str = "scheduled_workflow",
+        env_url: str = "",
+        execute_account: str = "",
+        execute_password: str = "",
     ) -> TaskRecord:
         task = await asyncio.to_thread(
             self.store.create_task_run,
@@ -272,6 +275,9 @@ class TaskManager:
             device_id=device_id,
             device_serial=device_serial,
             input_text=input_text,
+            env_url=env_url,
+            execute_account=execute_account,
+            execute_password=execute_password,
         )
         self._completion_events[task["id"]] = asyncio.Event()
         self._ensure_worker(device_id)
@@ -664,12 +670,24 @@ class TaskManager:
                         if "continue_with" in sig.parameters:
                             stream_kwargs["continue_with"] = task["input_text"]
 
+                    # PC Web 任务：将环境信息传递给 agent（仅在第一步传入）
+                    env_url = task.get("env_url", "") or ""
+                    execute_account = task.get("execute_account", "") or ""
+                    execute_password = task.get("execute_password", "") or ""
+                    first_step_kwargs: dict[str, Any] = {**stream_kwargs}
+                    if env_url:
+                        sig = inspect.signature(agent.stream)
+                        if "env_url" in sig.parameters:
+                            first_step_kwargs["env_url"] = env_url
+                            first_step_kwargs["execute_account"] = execute_account
+                            first_step_kwargs["execute_password"] = execute_password
+
                     business_status = None
                     has_assertion = False
                     step_event_type = ""
                     step_event_data: dict[str, Any] = {}
 
-                    for step in workflow_steps:
+                    for step_idx, step in enumerate(workflow_steps):
                         step_type = step.get("step_type", "action")
                         step_name = step.get("step_name", "")
                         step_order = step.get("step_order", step_count + 1)
@@ -691,9 +709,12 @@ class TaskManager:
                         step_event_type = ""
                         step_event_data = {}
 
+                        # 第一步使用 first_step_kwargs（含环境信息），后续用 stream_kwargs
+                        current_kwargs = first_step_kwargs if step_idx == 0 else stream_kwargs
+
                         async for event in agent.stream(
                             step_name,
-                            **stream_kwargs,
+                            **current_kwargs,
                         ):
                             event_type = event["type"]
                             event_data = dict(event.get("data", {}))
@@ -1149,7 +1170,19 @@ class TaskManager:
 
                     has_assertion = False
 
-                    for step in workflow_steps:
+                    # PC Web 任务：将环境信息传递给 agent（仅在第一步传入）
+                    env_url = task.get("env_url", "") or ""
+                    execute_account = task.get("execute_account", "") or ""
+                    execute_password = task.get("execute_password", "") or ""
+                    first_step_kwargs: dict[str, Any] = {}
+                    if env_url:
+                        sig = inspect.signature(agent.stream)
+                        if "env_url" in sig.parameters:
+                            first_step_kwargs["env_url"] = env_url
+                            first_step_kwargs["execute_account"] = execute_account
+                            first_step_kwargs["execute_password"] = execute_password
+
+                    for step_idx, step in enumerate(workflow_steps):
                         step_type = step.get("step_type", "action")
                         step_name = step.get("step_name", "")
                         step_order = step.get("step_order", step_count + 1)
@@ -1169,7 +1202,10 @@ class TaskManager:
                         step_event_type = ""
                         step_event_data: dict[str, Any] = {}
 
-                        async for event in agent.stream(step_name):
+                        # 第一步使用 first_step_kwargs（含环境信息），后续用空 kwargs
+                        current_kwargs = first_step_kwargs if step_idx == 0 else {}
+
+                        async for event in agent.stream(step_name, **current_kwargs):
                             event_type = event["type"]
                             event_data = dict(event.get("data", {}))
 

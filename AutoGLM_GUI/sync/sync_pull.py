@@ -144,6 +144,9 @@ class SyncPull:
                     cron_expression=item.cron_expression,
                     enabled=item.enabled,
                     execution_mode=item.execution_mode,
+                    env_url=item.env_url or "",
+                    execute_account=item.execute_account or "",
+                    execute_password=item.execute_password or "",
                 )
                 logger.debug("Updated scheduled task %s", item.id)
             else:
@@ -159,6 +162,9 @@ class SyncPull:
                     cron_expression=item.cron_expression,
                     enabled=item.enabled,
                     execution_mode=item.execution_mode,
+                    env_url=item.env_url or "",
+                    execute_account=item.execute_account or "",
+                    execute_password=item.execute_password or "",
                 )
                 self._scheduler._tasks[task.id] = task  # noqa: SLF001
                 self._scheduler._save_tasks()  # noqa: SLF001

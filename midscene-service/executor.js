@@ -72,6 +72,163 @@ class BrowserExecutor {
   }
 
   /**
+   * 登录环境：导航到 URL 后，使用 AI 智能填写账号密码并提交登录。
+   *
+   * @param {string} url - 目标环境 URL
+   * @param {string} account - 登录账号
+   * @param {string} password - 登录密码
+   * @returns {Promise<{loginUrl: string}>} 登录后的页面 URL
+   */
+  async login(url, account, password) {
+    this._assertReady();
+    serviceLogger.info('BrowserExecutor', `登录环境: url=${url}, account=${account}`);
+
+    // 先导航到登录页面
+    await this.navigate(url);
+
+    // 使用 AI 智能登录：让 Midscene Agent 填写账号密码并提交
+    const loginPrompt = `请执行登录操作：在登录页面中，找到用户名/账号输入框，输入"${account}"；找到密码输入框，输入"${password}"；然后点击登录/提交按钮完成登录。如果页面上有验证码或其他需要人工操作的步骤，请跳过。`;
+
+    try {
+      const agent = new PlaywrightAgent(this.page, {
+        modelName: process.env.MIDSCENE_MODEL_NAME,
+        modelApiKey: process.env.MIDSCENE_API_KEY,
+        modelBaseUrl: process.env.MIDSCENE_BASE_URL,
+      });
+
+      await agent.aiAction(loginPrompt);
+
+      // 等待页面跳转完成
+      await this.page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {
+        serviceLogger.warn('BrowserExecutor', '登录后等待 networkidle 超时，继续执行');
+      });
+
+      const currentUrl = this.page.url();
+      serviceLogger.info('BrowserExecutor', `登录完成, 当前 URL: ${currentUrl}`);
+      return { loginUrl: currentUrl };
+    } catch (err) {
+      serviceLogger.error('BrowserExecutor', `登录失败: ${err.message}`);
+      throw err;
+    }
+  }
+
+  /**
+   * 检测并提取断言 prompt。
+   *
+   * task_manager 会将断言步骤的 prompt 格式化为：
+   *   "断言" + step_name + _ASSERTION_SUFFIX
+   * 其中 _ASSERTION_SUFFIX 包含 "【重要】" 标记，要求模型输出 RESULT: PASS/FAIL。
+   *
+   * 此方法提取纯断言内容，供 aiAssert 使用。
+   *
+   * @param {string} prompt - 原始 prompt
+   * @returns {string|null} - 纯断言内容；非断言 prompt 返回 null
+   */
+  _extractAssertionPrompt(prompt) {
+    serviceLogger.info('BrowserExecutor', `_extractAssertionPrompt: prompt="${prompt ? prompt.substring(0, 80) : '(empty)'}", startsWith断言=${prompt ? prompt.startsWith('断言') : false}`);
+    if (!prompt || !prompt.startsWith('断言')) return null;
+    // 去掉 "断言" 前缀
+    let content = prompt.slice(2);
+    // 去掉 _ASSERTION_SUFFIX（从 "【重要】" 开始的部分）
+    const suffixIdx = content.indexOf('【重要】');
+    if (suffixIdx !== -1) {
+      content = content.slice(0, suffixIdx);
+    }
+    return content.trim();
+  }
+
+  /**
+   * 执行断言任务，使用 aiAssert 代替 aiAct。
+   *
+   * aiAssert 返回 boolean，映射为：
+   * - true  → done 事件，message 含 "PASS"，success=true
+   * - false → done 事件，message 含 "FAIL"，success=false（业务失败，非运行错误）
+   *
+   * @param {string} url - 目标页面 URL
+   * @param {string} assertionContent - 纯断言内容（已去除前缀和 suffix）
+   * @param {(event: object) => void} onEvent - SSE 事件回调
+   * @param {number} stepCount - 当前步骤数
+   */
+  async _executeAssertion(url, assertionContent, onEvent, stepCount) {
+    onEvent({
+      type: 'thinking',
+      data: { chunk: `正在执行断言: ${assertionContent}` },
+    });
+
+    try {
+      // keepRawResponse: true 让 aiAssert 返回 {pass, thought, message} 对象，
+      // 而不是在断言失败时抛异常。断言失败属于业务异常，不是运行错误。
+      const assertResult = await this.agent.aiAssert(assertionContent, undefined, {
+        abortSignal: this._abortController.signal,
+        keepRawResponse: true,
+      });
+
+      if (this.aborted) {
+        onEvent({ type: 'cancelled', data: { message: '任务已取消' } });
+        return;
+      }
+
+      const pass = assertResult.pass;
+      const thought = assertResult.thought || '';
+
+      // 截图
+      let screenshotB64 = null;
+      try {
+        const buf = await this.page.screenshot({ type: 'png' });
+        screenshotB64 = buf.toString('base64');
+      } catch (e) {
+        serviceLogger.warn('BrowserExecutor', `断言截图失败: ${e.message}`);
+      }
+
+      // 发送 step 事件
+      const stepData = {
+        step: stepCount,
+        thinking: thought ? `断言: ${assertionContent}\n${thought}` : `断言: ${assertionContent}`,
+        action: { _metadata: 'Midscene', type: 'aiAssert', description: assertionContent },
+        success: true,
+        message: pass ? 'PASS' : 'FAIL',
+      };
+      if (screenshotB64) {
+        stepData.screenshot = screenshotB64;
+      }
+      onEvent({ type: 'step', data: stepData });
+
+      // 发送 done 事件
+      if (pass) {
+        onEvent({
+          type: 'done',
+          data: {
+            message: 'RESULT: PASS',
+            steps: stepCount,
+            success: true,
+          },
+        });
+      } else {
+        onEvent({
+          type: 'done',
+          data: {
+            message: 'RESULT: FAIL',
+            steps: stepCount,
+            success: false,
+          },
+        });
+      }
+    } catch (err) {
+      serviceLogger.warn('BrowserExecutor', `断言异常: ${err.message}`);
+      const msg = err.message || '';
+      if (this.aborted) {
+        onEvent({ type: 'cancelled', data: { message: '任务已取消' } });
+      } else {
+        // 断言执行异常属于运行错误，发送 error 事件
+        onEvent({
+          type: 'error',
+          data: { message: `断言执行异常: ${msg}` },
+        });
+      }
+    }
+  }
+
+  /**
    * 执行巡检任务，通过 onEvent 回调发送 SSE 兼容事件。
    *
    * 事件类型:
@@ -86,24 +243,46 @@ class BrowserExecutor {
    * @param {string} [taskId] - 任务 ID
    * @param {(event: object) => void} onEvent - SSE 事件回调
    */
-  async execute(url, prompt, taskId, onEvent) {
+  async execute(url, prompt, taskId, onEvent, skipNavigate = false) {
     this.currentTaskId = taskId || null;
     this.aborted = false;
     this._abortController = new AbortController();
 
     let stepCount = 0;
 
-    try {
-      // --- 导航 ---
-      serviceLogger.info('BrowserExecutor', `开始执行任务, URL: ${url}, Prompt: ${prompt}`);
-      onEvent({
-        type: 'thinking',
-        data: { chunk: `正在导航到 ${url} …` },
+    // --- 断言步骤：在导航前检测，使用 aiAssert 代替 aiAct ---
+    const assertionContent = this._extractAssertionPrompt(prompt);
+    if (assertionContent) {
+      serviceLogger.info('BrowserExecutor', `检测到断言 prompt，走 aiAssert 分支: "${assertionContent.substring(0, 60)}"`);
+      // 断言步骤不需要重新导航，直接在当前页面执行
+      this.agent = new PlaywrightAgent(this.page, {
+        generateReport: false,
+        autoPrintReportMsg: false,
       });
+      stepCount++;
+      await this._executeAssertion(url, assertionContent, onEvent, stepCount);
+      return;
+    }
 
-      await this.page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
-      const currentUrl = this.page.url();
-      serviceLogger.info('BrowserExecutor', `导航完成, 当前页面: ${currentUrl}`);
+    try {
+      // --- 导航（skipNavigate=true 时跳过，避免覆盖已登录的页面） ---
+      serviceLogger.info('BrowserExecutor', `开始执行任务, URL: ${url}, skipNavigate: ${skipNavigate}, Prompt: ${prompt}`);
+
+      if (skipNavigate) {
+        serviceLogger.info('BrowserExecutor', `跳过导航，使用当前页面: ${this.page.url()}`);
+        onEvent({
+          type: 'thinking',
+          data: { chunk: `在当前页面继续执行任务` },
+        });
+      } else {
+        onEvent({
+          type: 'thinking',
+          data: { chunk: `正在导航到 ${url} …` },
+        });
+        await this.page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
+        const currentUrl = this.page.url();
+        serviceLogger.info('BrowserExecutor', `导航完成, 当前页面: ${currentUrl}`);
+      }
 
       // --- 创建 Agent ---
       this.agent = new PlaywrightAgent(this.page, {

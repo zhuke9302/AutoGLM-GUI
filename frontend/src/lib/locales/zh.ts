@@ -232,6 +232,7 @@ export const zh = {
     agentError: '错误',
     agentInitializing: '初始化中',
     remote: '远程',
+    local: '本地',
     wifi: 'WiFi',
     removeRemote: '移除远程设备',
     connectWifiTitle: '连接 WiFi',

@@ -7,8 +7,6 @@ import json
 import re
 from collections.abc import AsyncIterator
 from typing import Any
-from urllib.parse import urlparse
-
 import httpx
 
 from AutoGLM_GUI.config import AgentConfig, ModelConfig, StepResult
@@ -66,12 +64,18 @@ class MidsceneWebAgent:
         return result
 
     def stream(
-        self, task: str, *, continue_with: str | None = None
+        self, task: str, *, continue_with: str | None = None,
+        env_url: str = "", execute_account: str = "", execute_password: str = "",
     ) -> AsyncIterator[dict[str, Any]]:
         """Stream execution events from midscene-service."""
-        return self._stream_impl(task)
+        return self._stream_impl(task, env_url=env_url,
+                                 execute_account=execute_account,
+                                 execute_password=execute_password)
 
-    async def _stream_impl(self, task: str) -> AsyncIterator[dict[str, Any]]:
+    async def _stream_impl(
+        self, task: str, *,
+        env_url: str = "", execute_account: str = "", execute_password: str = "",
+    ) -> AsyncIterator[dict[str, Any]]:
         """Internal implementation of stream."""
         self._is_running = True
         self._step_count = 0
@@ -82,8 +86,8 @@ class MidsceneWebAgent:
 
         self._cancel_event.clear()
 
-        # 尝试从 task 中提取 URL 并导航
-        target_url = getattr(self._device, "_target_url", None)
+        # 优先使用 env_url（从服务端同步的环境URL），否则从 task 文本提取
+        target_url = env_url or getattr(self._device, "_target_url", None)
         if not target_url:
             target_url = _extract_url(task)
 
@@ -108,11 +112,48 @@ class MidsceneWebAgent:
                     except Exception as e:
                         logger.warning(f"导航失败: {e}")
 
-                logger.info(f"[MidsceneWeb] 发送执行请求: url={target_url or 'about:blank'}, task={task[:50]}")
+                # 如果提供了登录账号和密码，先执行登录
+                if execute_account and execute_password and target_url:
+                    try:
+                        logger.info(f"[MidsceneWeb] 执行登录: account={execute_account}, url={target_url}")
+                        login_resp = await client.post(
+                            "/login",
+                            json={
+                                "url": target_url,
+                                "account": execute_account,
+                                "password": execute_password,
+                            },
+                            timeout=120.0,
+                        )
+                        login_resp.raise_for_status()
+                        login_result = login_resp.json()
+                        logger.info(f"[MidsceneWeb] 登录结果: {login_result}")
+                        yield {
+                            "type": "thinking",
+                            "data": {"chunk": f"已使用账号 {execute_account} 登录环境 …"},
+                        }
+                    except Exception as e:
+                        logger.warning(f"登录失败: {e}")
+                        yield {
+                            "type": "thinking",
+                            "data": {"chunk": f"登录环境失败: {e}，继续执行巡检任务 …"},
+                        }
+
+                # 如果已经通过 /navigate 和 /login 完成了导航和登录，
+                # 则 /execute 不需要再导航（避免覆盖登录状态）
+                navigated = bool(target_url) and (execute_account and execute_password)
+                execute_body: dict[str, Any] = {"prompt": task}
+                if navigated:
+                    execute_body["skipNavigate"] = True
+                    execute_body["url"] = target_url  # 仍传 URL 用于日志
+                else:
+                    execute_body["url"] = target_url or "about:blank"
+
+                logger.info(f"[MidsceneWeb] 发送执行请求: url={execute_body.get('url')}, skipNavigate={navigated}, task={task[:50]}")
                 async with client.stream(
                     "POST",
                     "/execute",
-                    json={"url": target_url or "about:blank", "prompt": task},
+                    json=execute_body,
                 ) as response:
                     async for line in response.aiter_lines():
                         if self._cancel_event.is_set():

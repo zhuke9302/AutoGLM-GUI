@@ -224,6 +224,9 @@ class PushChannel:
                     input_text=workflow["text"],
                     schedule_fire_id=evt.fire_id,
                     executor_key=executor_key,
+                    env_url=task.env_url,
+                    execute_account=task.execute_account,
+                    execute_password=task.execute_password,
                 )
                 logger.info("Dispatched task for device %s", serial)
         except Exception as e:

@@ -46,6 +46,31 @@ class RemoteDeviceConfig(TypedDict):
     device_id: str
 
 
+# PC Web 巡检虚拟设备标识
+WEB_BROWSER_SERIAL = "web-browser"
+
+
+def _create_web_browser_device() -> ManagedDevice:
+    """创建 PC Web 巡检虚拟设备.
+
+    该设备始终在线，使用 LOCAL 连接类型，
+    供定时任务调度和设备上报使用。
+    """
+    conn = DeviceConnection(
+        device_id=WEB_BROWSER_SERIAL,
+        connection_type=DeviceConnectionType.LOCAL,
+        status="device",
+        last_seen=time.time(),
+    )
+    return ManagedDevice(
+        serial=WEB_BROWSER_SERIAL,
+        connections=[conn],
+        model="PC Web Browser",
+        display_name="PC Web",
+        state=DeviceState.ONLINE,
+    )
+
+
 class RemoteDiscoveryDevice(TypedDict):
     device_id: str
     model: str
@@ -355,7 +380,7 @@ class DeviceManager:
         self._device_change_callbacks.append(callback)
 
     def get_devices(self) -> list[ManagedDevice]:
-        """Get all cached devices (connected + available mDNS)."""
+        """Get all cached devices (connected + available mDNS + PC Web)."""
         with self._devices_lock:
             # Merge connected and mDNS devices
             all_devices = list(self._devices.values())
@@ -369,17 +394,32 @@ class DeviceManager:
             ]
 
             all_devices.extend(mdns_only)
+
+            # Add PC Web virtual device (always online)
+            if WEB_BROWSER_SERIAL not in connected_serials:
+                all_devices.append(_create_web_browser_device())
+
             return all_devices
 
     def get_connected_devices(self) -> list[ManagedDevice]:
         """Get devices in primary cache (USB/WiFi/Remote, excludes mDNS-only)."""
         with self._devices_lock:
-            return list(self._devices.values())
+            devices = list(self._devices.values())
+            # Include PC Web virtual device
+            if WEB_BROWSER_SERIAL not in self._devices:
+                devices.append(_create_web_browser_device())
+            return devices
 
     def get_device_by_serial(self, serial: DeviceSerial) -> ManagedDevice | None:
         """Get device by serial from primary cache."""
         with self._devices_lock:
-            return self._devices.get(serial)
+            device = self._devices.get(serial)
+            if device is not None:
+                return device
+            # PC Web virtual device
+            if serial == WEB_BROWSER_SERIAL:
+                return _create_web_browser_device()
+            return None
 
     def is_polling_active(self) -> bool:
         """Check whether background polling thread is running."""
@@ -404,6 +444,10 @@ class DeviceManager:
             serial = self._device_id_to_serial.get(device_id)
             if serial:
                 return self._devices.get(serial)
+
+            # PC Web virtual device
+            if device_id == WEB_BROWSER_SERIAL:
+                return _create_web_browser_device()
 
             return None
 

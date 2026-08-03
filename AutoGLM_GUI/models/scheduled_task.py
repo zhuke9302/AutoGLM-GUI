@@ -48,6 +48,11 @@ class ScheduledTask:
     enabled: bool = True  # 是否启用
     execution_mode: str = "classic"  # classic | layered
 
+    # PC Web 环境信息（从服务端同步）
+    env_url: str = ""  # 环境URL
+    execute_account: str = ""  # 执行账号
+    execute_password: str = ""  # 执行密码
+
     # 元数据
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
@@ -72,6 +77,9 @@ class ScheduledTask:
             "cron_expression": self.cron_expression,
             "enabled": self.enabled,
             "execution_mode": self.execution_mode,
+            "env_url": self.env_url,
+            "execute_account": self.execute_account,
+            "execute_password": self.execute_password,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
             "last_run_time": self.last_run_time.isoformat()
@@ -103,6 +111,9 @@ class ScheduledTask:
             cron_expression=data.get("cron_expression", ""),
             enabled=data.get("enabled", True),
             execution_mode=data.get("execution_mode", "classic"),
+            env_url=data.get("env_url", ""),
+            execute_account=data.get("execute_account", ""),
+            execute_password=data.get("execute_password", ""),
             created_at=datetime.fromisoformat(data["created_at"])
             if data.get("created_at")
             else datetime.now(tz=timezone.utc),
