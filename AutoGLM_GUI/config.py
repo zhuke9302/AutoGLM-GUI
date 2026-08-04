@@ -40,6 +40,7 @@ class ModelConfig:
     frequency_penalty: float = 0.2
     extra_body: dict[str, Any] = field(default_factory=dict)
     lang: str = "cn"
+    model_family: str | None = None
     midscene_service_url: str = field(
         default_factory=lambda: os.environ.get(
             "MIDSCENE_SERVICE_URL", "http://localhost:39000"

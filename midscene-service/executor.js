@@ -92,8 +92,9 @@ class BrowserExecutor {
     try {
       const agent = new PlaywrightAgent(this.page, {
         modelName: process.env.MIDSCENE_MODEL_NAME,
-        modelApiKey: process.env.MIDSCENE_API_KEY,
-        modelBaseUrl: process.env.MIDSCENE_BASE_URL,
+        modelApiKey: process.env.MIDSCENE_MODEL_API_KEY,
+        modelBaseUrl: process.env.MIDSCENE_MODEL_BASE_URL,
+        modelFamily: process.env.MIDSCENE_MODEL_FAMILY,
       });
 
       await agent.aiAction(loginPrompt);
@@ -258,6 +259,10 @@ class BrowserExecutor {
       this.agent = new PlaywrightAgent(this.page, {
         generateReport: false,
         autoPrintReportMsg: false,
+        modelName: process.env.MIDSCENE_MODEL_NAME,
+        modelApiKey: process.env.MIDSCENE_MODEL_API_KEY,
+        modelBaseUrl: process.env.MIDSCENE_MODEL_BASE_URL,
+        modelFamily: process.env.MIDSCENE_MODEL_FAMILY,
       });
       stepCount++;
       await this._executeAssertion(url, assertionContent, onEvent, stepCount);
@@ -288,6 +293,10 @@ class BrowserExecutor {
       this.agent = new PlaywrightAgent(this.page, {
         generateReport: false,
         autoPrintReportMsg: false,
+        modelName: process.env.MIDSCENE_MODEL_NAME,
+        modelApiKey: process.env.MIDSCENE_MODEL_API_KEY,
+        modelBaseUrl: process.env.MIDSCENE_MODEL_BASE_URL,
+        modelFamily: process.env.MIDSCENE_MODEL_FAMILY,
       });
 
       // --- 当前步骤截图队列 ---

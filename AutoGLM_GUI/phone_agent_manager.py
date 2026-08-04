@@ -255,7 +255,9 @@ class PhoneAgentManager:
                     "agent_manager.get_device_protocol",
                     attrs={"device_id": actual_device_id},
                 ):
-                    device = await device_manager.get_async_device_protocol(actual_device_id)
+                    device = await device_manager.get_async_device_protocol(
+                        actual_device_id
+                    )
             except ValueError:
                 device_manager.force_refresh()
                 with trace_span(
@@ -265,7 +267,9 @@ class PhoneAgentManager:
                         "after_refresh": True,
                     },
                 ):
-                    device = await device_manager.get_async_device_protocol(actual_device_id)
+                    device = await device_manager.get_async_device_protocol(
+                        actual_device_id
+                    )
 
             with trace_span(
                 "agent_manager.create_agent",
@@ -408,12 +412,32 @@ class PhoneAgentManager:
                 f"Please configure base_url via /api/config before sending tasks."
             )
 
-        # 使用本地配置类型
-        model_config = ModelConfig(
-            base_url=effective_config.base_url,
-            api_key=effective_config.api_key,
-            model_name=effective_config.model_name,
+        # 使用提供的 agent_type 或从配置中获取
+        effective_agent_type = agent_type or effective_config.agent_type
+        logger.info(
+            f"[PhoneAgentManager] agent_type 解析: "
+            f"入参={agent_type}, config={effective_config.agent_type}, "
+            f"最终={effective_agent_type}"
         )
+
+        # web-browser 设备优先使用 PC 视觉模型配置
+        if effective_agent_type == "midscene-web":
+            pc_base_url = getattr(effective_config, "pc_base_url", None)
+            pc_model_name = getattr(effective_config, "pc_model_name", None)
+            pc_api_key = getattr(effective_config, "pc_api_key", None)
+            pc_model_family = getattr(effective_config, "pc_model_family", None)
+            model_config = ModelConfig(
+                base_url=pc_base_url or effective_config.base_url,
+                api_key=pc_api_key or effective_config.api_key,
+                model_name=pc_model_name or effective_config.model_name,
+                model_family=pc_model_family,
+            )
+        else:
+            model_config = ModelConfig(
+                base_url=effective_config.base_url,
+                api_key=effective_config.api_key,
+                model_name=effective_config.model_name,
+            )
 
         # 使用实际的 device_id 创建 AgentConfig
         agent_config = AgentConfig(device_id=actual_device_id)
@@ -421,13 +445,6 @@ class PhoneAgentManager:
         # 调用 factory 方法创建 agent（避免直接依赖 phone_agent）
         agent_specific_config = cast(
             AgentSpecificConfig, effective_config.agent_config_params or {}
-        )
-        # 使用提供的 agent_type 或从配置中获取
-        effective_agent_type = agent_type or effective_config.agent_type
-        logger.info(
-            f"[PhoneAgentManager] agent_type 解析: "
-            f"入参={agent_type}, config={effective_config.agent_type}, "
-            f"最终={effective_agent_type}"
         )
 
         # Web模式下使用空回调函数，不阻塞CLI
@@ -665,7 +682,9 @@ class PhoneAgentManager:
         async with self._manager_lock:
             if agent_key not in self._agents:
                 if auto_initialize:
-                    await self._auto_initialize_agent_unsafe(agent_key, device_id, agent_type=agent_type)
+                    await self._auto_initialize_agent_unsafe(
+                        agent_key, device_id, agent_type=agent_type
+                    )
                 else:
                     raise AgentNotInitializedError(
                         f"Agent not initialized for device {agent_key}. "

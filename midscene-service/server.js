@@ -47,6 +47,28 @@ async function ensureBrowser() {
   }
 }
 
+// ------------------------------------------------------------------ /config
+
+app.post('/config', (req, res) => {
+  const { aiConfig } = req.body || {};
+  if (!aiConfig || typeof aiConfig !== 'object') {
+    serviceLogger.warn('server', '/config 缺少 aiConfig 参数');
+    return res.status(400).json({ error: '缺少 aiConfig 参数' });
+  }
+
+  serviceLogger.info('server', `收到模型配置推送: ${JSON.stringify(Object.keys(aiConfig))}`);
+
+  // 将推送的配置写入 process.env，供 PlaywrightAgent 读取
+  for (const [key, value] of Object.entries(aiConfig)) {
+    if (typeof value === 'string' && value.trim()) {
+      process.env[key] = value;
+      serviceLogger.info('server', `设置环境变量: ${key}=${value.substring(0, 20)}...`);
+    }
+  }
+
+  res.json({ status: 'ok', message: '模型配置已更新' });
+});
+
 // ------------------------------------------------------------------ /health
 
 app.get('/health', (_req, res) => {

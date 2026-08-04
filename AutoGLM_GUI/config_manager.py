@@ -64,6 +64,10 @@ class ConfigFileData(TypedDict, total=False):
     decision_base_url: str
     decision_model_name: str
     decision_api_key: str
+    pc_base_url: str
+    pc_model_name: str
+    pc_api_key: str
+    pc_model_family: str
 
 
 class ConfigModel(BaseModel):
@@ -86,6 +90,12 @@ class ConfigModel(BaseModel):
     decision_base_url: str | None = None
     decision_model_name: str | None = None
     decision_api_key: str | None = None
+
+    # PC视觉模型配置（用于 midscene-web agent）
+    pc_base_url: str | None = None
+    pc_model_name: str | None = None
+    pc_api_key: str | None = None
+    pc_model_family: str | None = None
 
     @field_validator("default_max_steps")
     @classmethod
@@ -133,6 +143,24 @@ class ConfigModel(BaseModel):
             raise ValueError("decision_model_name cannot be empty string")
         return v.strip() if v else v
 
+    @field_validator("pc_base_url")
+    @classmethod
+    def validate_pc_base_url(cls, v: str | None) -> str | None:
+        """验证 pc_base_url 格式."""
+        if v is not None:
+            if not v.startswith(("http://", "https://")):
+                raise ValueError("pc_base_url must start with http:// or https://")
+            return v.rstrip("/")
+        return v
+
+    @field_validator("pc_model_name")
+    @classmethod
+    def validate_pc_model_name(cls, v: str | None) -> str | None:
+        """验证 pc_model_name 非空."""
+        if v is not None and (not v or not v.strip()):
+            raise ValueError("pc_model_name cannot be empty string")
+        return v.strip() if v else v
+
     @field_validator("layered_max_turns")
     @classmethod
     def validate_layered_max_turns(cls, v: int | None) -> int | None:
@@ -163,6 +191,11 @@ class ConfigLayer:
     decision_base_url: str | None = None
     decision_model_name: str | None = None
     decision_api_key: str | None = None
+    # PC视觉模型配置
+    pc_base_url: str | None = None
+    pc_model_name: str | None = None
+    pc_api_key: str | None = None
+    pc_model_family: str | None = None
 
     source: ConfigSource = ConfigSource.DEFAULT
     explicit_keys: set[str] = field(default_factory=set, repr=False)
@@ -185,6 +218,10 @@ class ConfigLayer:
             "decision_base_url": self.decision_base_url,
             "decision_model_name": self.decision_model_name,
             "decision_api_key": self.decision_api_key,
+            "pc_base_url": self.pc_base_url,
+            "pc_model_name": self.pc_model_name,
+            "pc_api_key": self.pc_api_key,
+            "pc_model_family": self.pc_model_family,
         }
         return cast(
             ConfigFileData,
@@ -254,6 +291,10 @@ class UnifiedConfigManager:
             decision_base_url=None,
             decision_model_name=None,
             decision_api_key=None,
+            pc_base_url=None,
+            pc_model_name=None,
+            pc_api_key=None,
+            pc_model_family=None,
             source=ConfigSource.DEFAULT,
         )
 
@@ -394,7 +435,9 @@ class UnifiedConfigManager:
                     with open(self._config_path, encoding="utf-8") as f:
                         existing = json.load(f)
                 except (json.JSONDecodeError, OSError) as e:
-                    logger.warning(f"Could not read existing config for server merge: {e}")
+                    logger.warning(
+                        f"Could not read existing config for server merge: {e}"
+                    )
 
             # 合并：服务器下发的字段覆盖现有值
             merged = {**existing, **values}
@@ -474,6 +517,10 @@ class UnifiedConfigManager:
                 "decision_base_url": config_data.get("decision_base_url"),
                 "decision_model_name": config_data.get("decision_model_name"),
                 "decision_api_key": config_data.get("decision_api_key"),
+                "pc_base_url": config_data.get("pc_base_url"),
+                "pc_model_name": config_data.get("pc_model_name"),
+                "pc_api_key": config_data.get("pc_api_key"),
+                "pc_model_family": config_data.get("pc_model_family"),
             }
             self._file_layer = ConfigLayer(
                 **file_values,
@@ -584,6 +631,10 @@ class UnifiedConfigManager:
                         "decision_base_url",
                         "decision_model_name",
                         "decision_api_key",
+                        "pc_base_url",
+                        "pc_model_name",
+                        "pc_api_key",
+                        "pc_model_family",
                     ]
                     for key in preserve_keys:
                         if key not in new_config and key in existing:
@@ -674,6 +725,10 @@ class UnifiedConfigManager:
             "decision_base_url",
             "decision_model_name",
             "decision_api_key",
+            "pc_base_url",
+            "pc_model_name",
+            "pc_api_key",
+            "pc_model_family",
             "layered_max_turns",
         ]
 
@@ -864,6 +919,10 @@ class UnifiedConfigManager:
                 "decision_base_url": config.decision_base_url,
                 "decision_model_name": config.decision_model_name,
                 "decision_api_key": config.decision_api_key,
+                "pc_base_url": config.pc_base_url,
+                "pc_model_name": config.pc_model_name,
+                "pc_api_key": config.pc_api_key,
+                "pc_model_family": config.pc_model_family,
                 "layered_max_turns": config.layered_max_turns,
             },
         )

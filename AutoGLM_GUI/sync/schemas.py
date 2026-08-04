@@ -169,6 +169,11 @@ class ServerConfigResponse(SyncBaseModel):
     decision_base_url: str | None = None
     decision_model_name: str | None = None
     decision_api_key: str | None = None
+    # PC视觉模型
+    pc_base_url: str | None = None
+    pc_model_name: str | None = None
+    pc_api_key: str | None = None
+    pc_model_family: str | None = None
 
 
 # ---------------------------------------------------------------------------

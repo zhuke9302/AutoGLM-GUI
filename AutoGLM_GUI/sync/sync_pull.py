@@ -242,6 +242,15 @@ class SyncPull:
                 server_values["decision_model_name"] = config.decision_model_name
             if config.decision_api_key is not None:
                 server_values["decision_api_key"] = config.decision_api_key
+            # PC视觉模型
+            if config.pc_base_url is not None:
+                server_values["pc_base_url"] = config.pc_base_url
+            if config.pc_model_name is not None:
+                server_values["pc_model_name"] = config.pc_model_name
+            if config.pc_api_key is not None:
+                server_values["pc_api_key"] = config.pc_api_key
+            if config.pc_model_family is not None:
+                server_values["pc_model_family"] = config.pc_model_family
 
             if server_values:
                 self._config.set_server_config(server_values)

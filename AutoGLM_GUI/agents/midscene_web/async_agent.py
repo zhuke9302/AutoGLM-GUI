@@ -64,17 +64,29 @@ class MidsceneWebAgent:
         return result
 
     def stream(
-        self, task: str, *, continue_with: str | None = None,
-        env_url: str = "", execute_account: str = "", execute_password: str = "",
+        self,
+        task: str,
+        *,
+        continue_with: str | None = None,
+        env_url: str = "",
+        execute_account: str = "",
+        execute_password: str = "",
     ) -> AsyncIterator[dict[str, Any]]:
         """Stream execution events from midscene-service."""
-        return self._stream_impl(task, env_url=env_url,
-                                 execute_account=execute_account,
-                                 execute_password=execute_password)
+        return self._stream_impl(
+            task,
+            env_url=env_url,
+            execute_account=execute_account,
+            execute_password=execute_password,
+        )
 
     async def _stream_impl(
-        self, task: str, *,
-        env_url: str = "", execute_account: str = "", execute_password: str = "",
+        self,
+        task: str,
+        *,
+        env_url: str = "",
+        execute_account: str = "",
+        execute_password: str = "",
     ) -> AsyncIterator[dict[str, Any]]:
         """Internal implementation of stream."""
         self._is_running = True
@@ -96,13 +108,47 @@ class MidsceneWebAgent:
             async with httpx.AsyncClient(
                 base_url=self._service_url, timeout=300.0
             ) as client:
+                # 推送 PC 模型配置到 midscene-service
+                if self.model_config.base_url and self.model_config.model_name:
+                    try:
+                        ai_config = {
+                            "MIDSCENE_MODEL_BASE_URL": self.model_config.base_url,
+                            "MIDSCENE_MODEL_NAME": self.model_config.model_name,
+                        }
+                        if self.model_config.api_key:
+                            ai_config["MIDSCENE_MODEL_API_KEY"] = (
+                                self.model_config.api_key
+                            )
+                        if self.model_config.model_family:
+                            ai_config["MIDSCENE_MODEL_FAMILY"] = (
+                                self.model_config.model_family
+                            )
+                        logger.info(
+                            f"[MidsceneWeb] 推送模型配置: base_url={self.model_config.base_url}, "
+                            f"model_name={self.model_config.model_name}, "
+                            f"model_family={self.model_config.model_family}"
+                        )
+                        config_resp = await client.post(
+                            "/config", json={"aiConfig": ai_config}
+                        )
+                        config_resp.raise_for_status()
+                        logger.info(
+                            f"[MidsceneWeb] 模型配置推送成功: {self.model_config.model_name}"
+                        )
+                    except Exception as e:
+                        logger.warning(f"[MidsceneWeb] 模型配置推送失败: {e}")
+                else:
+                    logger.warning(
+                        f"[MidsceneWeb] 模型配置不完整，跳过推送: "
+                        f"base_url={self.model_config.base_url}, "
+                        f"model_name={self.model_config.model_name}"
+                    )
+
                 # 先导航到目标 URL
                 if target_url:
                     try:
                         logger.info(f"[MidsceneWeb] 发送导航请求: {target_url}")
-                        resp = await client.post(
-                            "/navigate", json={"url": target_url}
-                        )
+                        resp = await client.post("/navigate", json={"url": target_url})
                         resp.raise_for_status()
                         logger.info(f"[MidsceneWeb] 导航响应: {resp.status_code}")
                         yield {
@@ -115,7 +161,9 @@ class MidsceneWebAgent:
                 # 如果提供了登录账号和密码，先执行登录
                 if execute_account and execute_password and target_url:
                     try:
-                        logger.info(f"[MidsceneWeb] 执行登录: account={execute_account}, url={target_url}")
+                        logger.info(
+                            f"[MidsceneWeb] 执行登录: account={execute_account}, url={target_url}"
+                        )
                         login_resp = await client.post(
                             "/login",
                             json={
@@ -130,7 +178,9 @@ class MidsceneWebAgent:
                         logger.info(f"[MidsceneWeb] 登录结果: {login_result}")
                         yield {
                             "type": "thinking",
-                            "data": {"chunk": f"已使用账号 {execute_account} 登录环境 …"},
+                            "data": {
+                                "chunk": f"已使用账号 {execute_account} 登录环境 …"
+                            },
                         }
                     except Exception as e:
                         logger.warning(f"登录失败: {e}")
@@ -149,7 +199,9 @@ class MidsceneWebAgent:
                 else:
                     execute_body["url"] = target_url or "about:blank"
 
-                logger.info(f"[MidsceneWeb] 发送执行请求: url={execute_body.get('url')}, skipNavigate={navigated}, task={task[:50]}")
+                logger.info(
+                    f"[MidsceneWeb] 发送执行请求: url={execute_body.get('url')}, skipNavigate={navigated}, task={task[:50]}"
+                )
                 async with client.stream(
                     "POST",
                     "/execute",

@@ -1,0 +1,18 @@
+- [x] `patrol_model_configs` 表新增 `pc_base_url`、`pc_model_name`、`pc_api_key` 三列
+- [x] `PatrolModelConfig.java` Entity 包含 `pcBaseUrl`、`pcModelName`、`pcApiKey` 字段
+- [x] `ConfigSyncResponse` 包含 `pcBaseUrl`、`pcModelName`、`pcApiKey` 字段
+- [x] `syncConfig` 接口返回 PC 视觉模型字段
+- [x] 模型配置表单弹窗包含三个 Tab：APP视觉模型、PC视觉模型、决策模型
+- [x] "视觉模型" Tab 标签已改为 "APP视觉模型"
+- [x] PC视觉模型 Tab 包含 model_name、base_url、api_key 三个输入字段
+- [x] PC视觉模型字段为可选（非必填）
+- [x] 提交时 PC 视觉模型字段正确合并到 payload
+- [x] 编辑回填时 PC 视觉模型字段正确填充
+- [x] 列表页表格展示 PC 视觉模型列
+- [x] `ServerConfigResponse` schema 包含 `pc_base_url`、`pc_model_name`、`pc_api_key` 字段
+- [x] `_apply_server_config` 方法将 PC 视觉模型字段写入 server_values
+- [x] web-browser 设备初始化 agent 时优先使用 PC 视觉模型配置
+- [x] PC 配置为空时降级使用 APP 视觉模型配置
+- [x] MidsceneWebAgent 首次连接 midscene-service 时通过 `POST /config` 推送模型配置
+- [x] aiConfig 包含 MIDSCENE_MODEL_BASE_URL、MIDSCENE_MODEL_NAME、MIDSCENE_MODEL_API_KEY
+- [x] 模型配置为空时跳过 `/config` 推送
