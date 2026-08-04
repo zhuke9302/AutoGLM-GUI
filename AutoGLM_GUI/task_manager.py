@@ -1110,10 +1110,17 @@ class TaskManager:
                     trace_id=trace_id,
                     source="scheduled",
                 )
+                # Web 设备强制使用 midscene-web agent，不受全局配置影响
+                if device_id == "web-browser":
+                    effective_agent_type = "midscene-web"
+                else:
+                    effective_agent_type = None
+
                 acquired = await manager.acquire_device_async(
                     device_id,
                     auto_initialize=True,
                     context=context,
+                    agent_type=effective_agent_type,
                 )
                 agent = await manager.get_agent_with_context_async(
                     device_id,

@@ -261,6 +261,10 @@ class TaskReporter:
             for task_run in recent_tasks:
                 task_id = task_run["id"]
                 if task_id not in self._reported_tasks:
+                    # 只上报定时任务，不同步 chat 类型任务
+                    if task_run.get("source") == "chat":
+                        self._reported_tasks.add(task_id)
+                        continue
                     success = await self.report_task_run(task_id)
                     if success:
                         await self.report_task_events(task_id)

@@ -215,6 +215,10 @@ class SyncManager:
                     from AutoGLM_GUI.sync.schemas import TaskRunReportRequest
 
                     req = TaskRunReportRequest.model_validate(payload)
+                    # 只上报定时任务，跳过 chat 类型
+                    if req.source == "chat":
+                        self._offline_queue.pop(item.id)
+                        continue
                     await self._client.report_task_run(req)
                 elif item.item_type == "task_events":
                     from AutoGLM_GUI.sync.schemas import TaskEventBatchRequest
