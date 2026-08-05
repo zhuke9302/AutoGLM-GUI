@@ -22,7 +22,7 @@ export const zh = {
     versionMismatchDetail: '前端: v{frontend}，后端: v{backend}',
   },
   chat: {
-    welcomeTitle: '欢迎使用 AutoGLM',
+    welcomeTitle: '欢迎使用智巡星',
     connectDevice: '连接 ADB 设备开始使用',
     configuration: '配置',
     configureApi: '配置您的 API 设置以开始使用',

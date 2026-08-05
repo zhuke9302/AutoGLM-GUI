@@ -22,7 +22,7 @@ export const en = {
     versionMismatchDetail: 'Frontend: v{frontend}, Backend: v{backend}',
   },
   chat: {
-    welcomeTitle: 'Welcome to AutoGLM',
+    welcomeTitle: 'Welcome to 智巡星',
     connectDevice: 'Connect an ADB device to get started',
     configuration: 'Configuration',
     configureApi: 'Configure your API settings to get started',

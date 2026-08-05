@@ -1,6 +1,6 @@
 [project]
 name = "ai-check"
-version = "26.7.7"
+version = "26.8.1"
 description = "Web GUI for AutoGLM Phone Agent - AI-powered Android automation"
 readme = "README.md"
 requires-python = ">=3.11"

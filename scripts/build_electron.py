@@ -82,7 +82,7 @@ def run_command(
 
     try:
         # Windows 下 pnpm/npm 等命令需要通过 shell 执行
-        use_shell = sys.platform == "win32" and cmd[0] in ["pnpm", "npm"]
+        use_shell = sys.platform == "win32" and cmd[0] in ["pnpm", "npm", "npx"]
 
         result = subprocess.run(
             cmd,
@@ -273,7 +273,7 @@ class ElectronBuilder:
         return True
 
     def build_midscene_service(self) -> bool:
-        """打包 midscene-service 为独立可执行文件"""
+        """打包 midscene-service（Node.js 运行时 + 脚本 + Playwright 浏览器）"""
         print_step("打包 midscene-service", 8, 6)
 
         service_dir = self.root_dir / "midscene-service"
@@ -286,32 +286,118 @@ class ElectronBuilder:
         if not run_command(["npm", "install"], cwd=service_dir):
             return False
 
-        # 确定输出文件名
-        output_name = "midscene-service.exe" if self.is_windows else "midscene-service"
-        output_dir = service_dir / "dist"
-        output_dir.mkdir(parents=True, exist_ok=True)
-        output_path = output_dir / output_name
+        # 下载 Playwright Chromium 浏览器到本地目录
+        print("\n下载 Playwright Chromium 浏览器...")
+        browsers_dir = service_dir / "browsers"
+        if browsers_dir.exists():
+            shutil.rmtree(browsers_dir)
+        browsers_dir.mkdir(parents=True, exist_ok=True)
 
-        # 使用 pkg 打包为独立可执行文件
-        print(f"\n使用 pkg 打包 midscene-service ({output_name})...")
+        browser_install_env = os.environ.copy()
+        browser_install_env["PLAYWRIGHT_BROWSERS_PATH"] = str(browsers_dir)
+        # 使用国内镜像加速下载
+        browser_install_env["PLAYWRIGHT_DOWNLOAD_HOST"] = "https://cdn.npmmirror.com/binaries/playwright"
         if not run_command(
-            [
-                "npx", "pkg", ".",
-                "--target", "node18-win-x64" if self.is_windows else "node18-linux-x64",
-                "--output", f"dist/{output_name}",
-            ],
+            ["npx", "playwright", "install", "chromium"],
             cwd=service_dir,
+            env=browser_install_env,
         ):
-            print_warning("midscene-service 打包失败，将跳过（应用仍可正常运行）")
+            print_warning("Playwright 浏览器下载失败，midscene-service 将回退到系统 Chrome")
             return True
 
-        # 复制到 resources 目录
+        print_success(f"Playwright Chromium 已下载到 {browsers_dir}")
+
+        # 复制到 resources 目录（直接复制脚本 + node_modules，不使用 pkg）
         dest = self.resources_dir / "midscene-service"
         if dest.exists():
             shutil.rmtree(dest)
         dest.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(output_path, dest / output_name)
-        print_success(f"midscene-service 已复制到 {dest}")
+
+        # 复制源码和依赖
+        for item in ["server.js", "executor.js", "logger.js", "package.json", "node_modules"]:
+            src = service_dir / item
+            if src.is_file():
+                shutil.copy2(src, dest / item)
+            elif src.is_dir():
+                shutil.copytree(src, dest / item)
+        print_success(f"midscene-service 脚本已复制到 {dest}")
+
+        # 复制 Playwright 浏览器到 resources
+        browsers_dest = dest / "browsers"
+        if browsers_dir.exists():
+            shutil.copytree(browsers_dir, browsers_dest)
+            print_success(f"Playwright 浏览器已复制到 {browsers_dest}")
+
+        # 下载 Node.js 独立运行时
+        print("\n下载 Node.js 运行时...")
+        node_dir = dest / "node-runtime"
+        node_dir.mkdir(parents=True, exist_ok=True)
+
+        import urllib.request
+        import zipfile
+
+        # 获取当前 Node.js 版本
+        node_version_result = subprocess.run(
+            ["node", "--version"], capture_output=True, text=True, shell=True
+        )
+        node_version = node_version_result.stdout.strip().lstrip("v")
+        if not node_version:
+            node_version = "18.20.4"
+            print_warning(f"无法检测 Node 版本，使用默认 {node_version}")
+
+        # 确定 Node.js 下载 URL（使用 npmmirror 镜像）
+        arch = "x64" if platform.machine().endswith("64") else "x86"
+        if self.is_windows:
+            node_url = f"https://cdn.npmmirror.com/binaries/node/v{node_version}/node-v{node_version}-win-{arch}.zip"
+            node_exe_name = "node.exe"
+        elif self.is_linux:
+            node_url = f"https://cdn.npmmirror.com/binaries/node/v{node_version}/node-v{node_version}-linux-{arch}.tar.gz"
+            node_exe_name = "bin/node"
+        else:
+            print_warning(f"不支持的平台 {self.platform}，跳过 Node.js 运行时下载")
+            return True
+
+        print(f"下载: {node_url}")
+        node_archive = dest / "node-archive"
+        try:
+            urllib.request.urlretrieve(node_url, node_archive)
+        except Exception as e:
+            print_warning(f"Node.js 运行时下载失败: {e}")
+            return True
+
+        # 解压
+        import tarfile
+        print("解压 Node.js 运行时...")
+        try:
+            if self.is_windows:
+                with zipfile.ZipFile(node_archive, "r") as zf:
+                    zf.extractall(node_dir)
+                # 找到 node.exe（在 node-vXX.X.X-win-x64/ 目录下）
+                for item in node_dir.iterdir():
+                    if item.is_dir() and item.name.startswith("node-v"):
+                        src_exe = item / node_exe_name
+                        if src_exe.exists():
+                            shutil.copy2(src_exe, node_dir / "node.exe")
+                        shutil.rmtree(item)
+                        break
+            else:
+                with tarfile.open(node_archive, "r:gz") as tf:
+                    tf.extractall(node_dir)
+                for item in node_dir.iterdir():
+                    if item.is_dir() and item.name.startswith("node-v"):
+                        src_exe = item / node_exe_name
+                        if src_exe.exists():
+                            shutil.copy2(src_exe, node_dir / "node")
+                        shutil.rmtree(item)
+                        break
+        except Exception as e:
+            print_warning(f"Node.js 解压失败: {e}")
+            return True
+        finally:
+            if node_archive.exists():
+                node_archive.unlink()
+
+        print_success(f"Node.js 运行时已安装到 {node_dir}")
 
         return True
 
@@ -375,35 +461,43 @@ class ElectronBuilder:
         print(f"平台: {self.platform}")
         print(f"项目根目录: {self.root_dir}\n")
 
-        steps = [
-            ("环境检查", lambda: self.check_environment()),
-            ("Python 依赖", lambda: self.sync_python_deps()),
-            (
-                "前端构建",
-                lambda: self.build_frontend()
-                if not self.args.skip_frontend
-                else (print_warning("跳过前端构建"), True)[1],
-            ),
-            (
-                "ADB 工具",
-                lambda: self.download_adb()
-                if not self.args.skip_adb
-                else (print_warning("跳过 ADB 下载"), True)[1],
-            ),
-            (
-                "后端打包",
-                lambda: self.build_backend()
-                if not self.args.skip_backend
-                else (print_warning("跳过后端打包"), True)[1],
-            ),
-            (
-                "midscene-service",
-                lambda: self.build_midscene_service()
-                if not self.args.skip_midscene
-                else (print_warning("跳过 midscene-service 打包"), True)[1],
-            ),
-            ("Electron", lambda: self.build_electron()),
-        ]
+        # 仅构建 midscene-service
+        if self.args.midscene_only:
+            print(f"{Color.CYAN}仅构建 midscene-service{Color.RESET}\n")
+            steps = [
+                ("环境检查", lambda: self.check_environment()),
+                ("midscene-service", lambda: self.build_midscene_service()),
+            ]
+        else:
+            steps = [
+                ("环境检查", lambda: self.check_environment()),
+                ("Python 依赖", lambda: self.sync_python_deps()),
+                (
+                    "前端构建",
+                    lambda: self.build_frontend()
+                    if not self.args.skip_frontend
+                    else (print_warning("跳过前端构建"), True)[1],
+                ),
+                (
+                    "ADB 工具",
+                    lambda: self.download_adb()
+                    if not self.args.skip_adb
+                    else (print_warning("跳过 ADB 下载"), True)[1],
+                ),
+                (
+                    "后端打包",
+                    lambda: self.build_backend()
+                    if not self.args.skip_backend
+                    else (print_warning("跳过后端打包"), True)[1],
+                ),
+                (
+                    "midscene-service",
+                    lambda: self.build_midscene_service()
+                    if not self.args.skip_midscene
+                    else (print_warning("跳过 midscene-service 打包"), True)[1],
+                ),
+                ("Electron", lambda: self.build_electron()),
+            ]
 
         for step_name, step_func in steps:
             if not step_func():
@@ -419,6 +513,7 @@ def main():
     parser.add_argument("--skip-adb", action="store_true", help="跳过 ADB 工具下载")
     parser.add_argument("--skip-backend", action="store_true", help="跳过后端打包")
     parser.add_argument("--skip-midscene", action="store_true", help="跳过 midscene-service 打包")
+    parser.add_argument("--midscene-only", action="store_true", help="仅构建 midscene-service（含 Playwright 浏览器）")
     parser.add_argument(
         "--publish",
         choices=["never", "onTag", "always"],

@@ -43,18 +43,20 @@ exports.default = async function(context) {
     console.warn('⚠ Backend executable not found:', backendExe);
   }
 
-  // 设置 midscene-service 可执行文件权限
-  const midsceneExe = path.join(
+  // 设置 midscene-service Node.js 运行时可执行权限
+  const nodeExeName = electronPlatformName === 'win32' ? 'node.exe' : 'node';
+  const midsceneNodeExe = path.join(
     resourcesPath,
     'midscene-service',
-    electronPlatformName === 'win32' ? 'midscene-service.exe' : 'midscene-service'
+    'node-runtime',
+    nodeExeName
   );
 
-  if (fs.existsSync(midsceneExe)) {
-    fs.chmodSync(midsceneExe, 0o755);
-    console.log('✓ Set executable permission for midscene-service:', midsceneExe);
+  if (fs.existsSync(midsceneNodeExe)) {
+    fs.chmodSync(midsceneNodeExe, 0o755);
+    console.log('✓ Set executable permission for midscene-service node:', midsceneNodeExe);
   } else {
-    console.log('ℹ midscene-service executable not found (optional):', midsceneExe);
+    console.log('ℹ midscene-service node runtime not found:', midsceneNodeExe);
   }
 
   // 设置 ADB 工具权限

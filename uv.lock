@@ -12,7 +12,7 @@ resolution-markers = [
 
 [[package]]
 name = "ai-check"
-version = "26.7.7"
+version = "26.8.1"
 source = { editable = "." }
 dependencies = [
     { name = "apscheduler" },

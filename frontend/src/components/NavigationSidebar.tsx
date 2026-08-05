@@ -97,12 +97,12 @@ export function NavigationSidebar({ className }: NavigationSidebarProps) {
       label: t.navigation.logs,
       path: '/logs',
     },
-    {
-      id: 'terminal',
-      icon: Terminal,
-      label: t.navigation.terminal,
-      path: '/terminal',
-    },
+    // {
+    //   id: 'terminal',
+    //   icon: Terminal,
+    //   label: t.navigation.terminal,
+    //   path: '/terminal',
+    // },
   ];
 
   // Determine sync indicator state
@@ -131,7 +131,7 @@ export function NavigationSidebar({ className }: NavigationSidebarProps) {
               <Link to="/chat" className="block">
                 <img
                   src={logoImage}
-                  alt="AutoGLM Logo"
+                  alt="智巡星 Logo"
                   className="w-10 h-10 object-contain cursor-pointer hover:opacity-80 transition-opacity"
                 />
               </Link>

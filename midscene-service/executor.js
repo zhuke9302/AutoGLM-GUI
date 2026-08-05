@@ -34,6 +34,11 @@ class BrowserExecutor {
 
     serviceLogger.info('BrowserExecutor', '正在启动浏览器…');
 
+    const browsersPath = process.env.PLAYWRIGHT_BROWSERS_PATH;
+    if (browsersPath) {
+      serviceLogger.info('BrowserExecutor', `Playwright 浏览器路径: ${browsersPath}`);
+    }
+
     try {
       this.browser = await chromium.launch({
         channel: 'chrome',

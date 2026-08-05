@@ -665,18 +665,36 @@ function startMidsceneService() {
     spawnArgs = [servicePath];
     spawnOptions = { env };
   } else {
-    // 生产模式：使用打包的可执行文件
+    // 生产模式：使用打包的 Node.js 运行时 + server.js
     const serviceDir = getResourcePath('midscene-service');
-    const exeName = process.platform === 'win32' ? 'midscene-service.exe' : 'midscene-service';
-    const exePath = path.join(serviceDir, exeName);
+    const nodeExe = path.join(serviceDir, 'node-runtime', 'node.exe');
+    const nodeExeOther = path.join(serviceDir, 'node-runtime', 'node');
+    const serverJs = path.join(serviceDir, 'server.js');
 
     const fs = require('fs');
-    if (!fs.existsSync(exePath)) {
-      writeMainLog('info', '[Midscene] Production: midscene-service executable not found, skipping', { exePath });
+    // 优先使用打包的 Node.js，回退到系统 node
+    if (fs.existsSync(nodeExe)) {
+      serviceExe = nodeExe;
+    } else if (fs.existsSync(nodeExeOther)) {
+      serviceExe = nodeExeOther;
+    } else {
+      serviceExe = 'node';
+      writeMainLog('warn', '[Midscene] Node runtime not found, using system node');
+    }
+
+    if (!fs.existsSync(serverJs)) {
+      writeMainLog('info', '[Midscene] Production: server.js not found, skipping', { serverJs });
       return;
     }
-    serviceExe = exePath;
-    spawnArgs = [];
+    spawnArgs = [serverJs];
+
+    // 设置 Playwright 浏览器路径（指向打包的 browsers 目录）
+    const browsersPath = path.join(serviceDir, 'browsers');
+    if (fs.existsSync(browsersPath)) {
+      env.PLAYWRIGHT_BROWSERS_PATH = browsersPath;
+      writeMainLog('info', '[Midscene] Playwright browsers path', { browsersPath });
+    }
+
     spawnOptions = { env };
   }
 
