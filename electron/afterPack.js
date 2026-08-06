@@ -79,5 +79,37 @@ exports.default = async function(context) {
     console.warn('⚠ ADB directory not found:', adbDir);
   }
 
+  // 复制 midscene-service 的 node_modules
+  // electron-builder 默认会排除 node_modules，需要手动复制
+  const midsceneSrcNodeModules = path.join(__dirname, '..', 'resources', 'midscene-service', 'node_modules');
+  const midsceneDestNodeModules = path.join(resourcesPath, 'midscene-service', 'node_modules');
+
+  if (fs.existsSync(midsceneSrcNodeModules)) {
+    console.log('Copying midscene-service node_modules...');
+    copyDirSync(midsceneSrcNodeModules, midsceneDestNodeModules);
+    console.log('✓ Copied midscene-service node_modules');
+  } else {
+    console.warn('⚠ midscene-service node_modules not found at:', midsceneSrcNodeModules);
+  }
+
   console.log('afterPack hook completed');
 };
+
+/**
+ * 递归复制目录
+ */
+function copyDirSync(src, dest) {
+  if (!fs.existsSync(dest)) {
+    fs.mkdirSync(dest, { recursive: true });
+  }
+  const entries = fs.readdirSync(src, { withFileTypes: true });
+  for (const entry of entries) {
+    const srcPath = path.join(src, entry.name);
+    const destPath = path.join(dest, entry.name);
+    if (entry.isDirectory()) {
+      copyDirSync(srcPath, destPath);
+    } else {
+      fs.copyFileSync(srcPath, destPath);
+    }
+  }
+}

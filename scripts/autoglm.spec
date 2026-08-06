@@ -40,6 +40,7 @@ a = Analysis(
 
         # Package metadata（运行时需要）
         *copy_metadata('fastmcp'),
+        *copy_metadata('ai-check'),
     ],
 
     # 隐藏导入：PyInstaller 无法自动检测的模块

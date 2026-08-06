@@ -14,7 +14,12 @@
  *   POST /navigate   - 导航到 URL
  */
 
-require('dotenv').config();
+// dotenv 可选加载（生产环境配置通过 /config 端点推送，不需要 .env 文件）
+try {
+  require('dotenv').config();
+} catch {
+  // dotenv 未安装时忽略，生产环境不依赖 .env
+}
 
 const express = require('express');
 const { BrowserExecutor } = require('./executor');

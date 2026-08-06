@@ -313,14 +313,21 @@ class ElectronBuilder:
             shutil.rmtree(dest)
         dest.mkdir(parents=True, exist_ok=True)
 
-        # 复制源码和依赖
-        for item in ["server.js", "executor.js", "logger.js", "package.json", "node_modules"]:
+        # 复制源码文件（不复制 node_modules，目标目录单独 npm install）
+        for item in ["server.js", "executor.js", "logger.js", "package.json"]:
             src = service_dir / item
-            if src.is_file():
+            if src.exists():
                 shutil.copy2(src, dest / item)
-            elif src.is_dir():
-                shutil.copytree(src, dest / item)
         print_success(f"midscene-service 脚本已复制到 {dest}")
+
+        # 在目标目录安装生产依赖
+        print("\n安装 midscene-service 生产依赖...")
+        npm_env = os.environ.copy()
+        npm_env["PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD"] = "1"
+        if not run_command(["npm", "install", "--production"], cwd=dest, env=npm_env):
+            print_error("midscene-service 依赖安装失败，服务将无法启动")
+            return False
+        print_success("midscene-service 依赖安装完成")
 
         # 复制 Playwright 浏览器到 resources
         browsers_dest = dest / "browsers"

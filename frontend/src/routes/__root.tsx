@@ -18,16 +18,11 @@ export function Footer() {
   const buildBackendVersion = __BACKEND_VERSION__ || 'unknown';
   const { locale, setLocale, localeName } = useLocale();
   const t = useTranslation();
-  const { backendVersion, updateInfo, showUpdateBadge, versionMismatch } =
+  const { updateInfo, showUpdateBadge } =
     useFooterVersionInfo(buildBackendVersion);
 
-  const displayedVersion = backendVersion ?? buildBackendVersion;
-  const versionTitle =
-    versionMismatch && backendVersion
-      ? t.footer.versionMismatchDetail
-          .replace('{frontend}', buildBackendVersion)
-          .replace('{backend}', backendVersion)
-      : t.footer.buildVersion.replace('{version}', buildBackendVersion);
+  const displayedVersion = buildBackendVersion;
+  const versionTitle = t.footer.buildVersion.replace('{version}', buildBackendVersion);
 
   const toggleLocale = () => {
     setLocale(locale === 'en' ? 'zh' : 'en');
@@ -63,9 +58,6 @@ export function Footer() {
               >
                 {t.footer.newVersion}
               </Badge>
-            )}
-            {versionMismatch && backendVersion && (
-              <Badge variant="warning">{t.footer.versionMismatch}</Badge>
             )}
           </span>
           <Separator

@@ -163,6 +163,7 @@ autoUpdater.on('error', (err) => {
 let backendProcess = null;
 let midsceneProcess = null;
 let backendPort = null;
+let midscenePort = 39000;
 let mainWindow = null;
 
 // 性能分析
@@ -507,7 +508,9 @@ async function startBackend() {
     // For PyInstaller-frozen backend, UTF-8 mode is set via build-time OPTIONS in autoglm.spec
     // See: https://github.com/pyinstaller/pyinstaller/discussions/9065
     PYTHONUTF8: '1',            // 启用 Python UTF-8 模式 (仅开发模式有效)
-    PYTHONIOENCODING: 'utf-8'   // 强制 stdin/stdout/stderr 使用 UTF-8 编码
+    PYTHONIOENCODING: 'utf-8',  // 强制 stdin/stdout/stderr 使用 UTF-8 编码
+    // 告知后端 midscene-service 的地址
+    MIDSCENE_SERVICE_URL: `http://localhost:${midscenePort}`
   };
 
   if (!isDev) {
@@ -651,6 +654,10 @@ function startMidsceneService() {
   const isDev = process.argv.includes('--dev');
 
   const env = { ...process.env };
+  // 将日志目录指向 Electron userData/logs
+  const { app } = require('electron');
+  env.MIDSCENE_LOGS_DIR = path.join(app.getPath('userData'), 'logs');
+  env.PORT = String(midscenePort);
   let serviceExe, spawnArgs, spawnOptions;
 
   if (isDev) {
@@ -737,6 +744,46 @@ function startMidsceneService() {
     writeMainLog('info', '[Midscene] Process exited', { code, signal });
     midsceneProcess = null;
   });
+}
+
+/**
+ * 等待 midscene-service 健康检查通过
+ */
+async function waitForMidsceneService(maxAttempts = 30, intervalMs = 1000) {
+  const http = require('http');
+  const url = `http://localhost:${midscenePort}/health`;
+
+  for (let i = 0; i < maxAttempts; i++) {
+    if (!midsceneProcess) {
+      writeMainLog('warn', '[Midscene] Process not running, stop waiting');
+      return;
+    }
+    try {
+      const ok = await new Promise((resolve) => {
+        const req = http.get(url, (res) => {
+          res.resume();
+          resolve(res.statusCode === 200);
+        });
+        req.on('error', () => resolve(false));
+        req.setTimeout(2000, () => {
+          req.destroy();
+          resolve(false);
+        });
+      });
+      if (ok) {
+        console.log('✓ midscene-service 健康检查通过');
+        return;
+      }
+    } catch {
+      // ignore
+    }
+    if (i === 0) {
+      console.log('等待 midscene-service 启动...');
+    }
+    await new Promise(r => setTimeout(r, intervalMs));
+  }
+  writeMainLog('warn', '[Midscene] Health check timed out, service may not be ready');
+  console.warn('⚠ midscene-service 健康检查超时');
 }
 
 /**
@@ -1113,9 +1160,11 @@ app.whenReady().then(async () => {
     // 打印后端日志位置
     printLogLocation();
 
-    // 4. 启动 midscene-service
+    // 4. 启动 midscene-service 并等待就绪
     startMidsceneService();
-    writeMainLog('info', '[App] Midscene-service started');
+    writeMainLog('info', '[App] Midscene-service started, waiting for ready...');
+    await waitForMidsceneService();
+    writeMainLog('info', '[App] Midscene-service is ready');
 
     // 5. 创建主窗口
     createWindow();

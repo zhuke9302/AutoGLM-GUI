@@ -1,7 +1,7 @@
 {
   "name": "ai-check",
   "version": "26.8.1",
-  "description": "AI-powered Android automation desktop app",
+  "description": "智巡星 - AI驱动的自动化桌面应用",
   "main": "main.js",
   "scripts": {
     "start": "electron .",

@@ -10,7 +10,10 @@
 const fs = require('fs');
 const path = require('path');
 
-const LOGS_DIR = path.resolve(__dirname, '..', 'logs');
+// 日志目录：优先使用环境变量（Electron userData/logs），回退到相对路径
+const LOGS_DIR = process.env.MIDSCENE_LOGS_DIR
+  ? path.resolve(process.env.MIDSCENE_LOGS_DIR)
+  : path.resolve(__dirname, '..', 'logs');
 
 /** 确保 logs 目录存在，不存在则创建 */
 ensureLogDir();
